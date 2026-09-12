@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "id": "kotlinx-serialization-json",
+      "group": "org.jetbrains.kotlinx",
+      "artifact": "kotlinx-serialization-json",
+      "preferredConfiguration": "implementation",
+      "documentationUrl": "https://github.com/Kotlin/kotlinx.serialization",
+      "companionPlugins": [
+        { "alias": "kotlin-serialization", "pluginId": "org.jetbrains.kotlin.plugin.serialization", "required": true }
+      ]
+    },
+    {
+      "id": "androidx-room-runtime",
+      "group": "androidx.room",
+      "artifact": "room-runtime",
+      "preferredConfiguration": "implementation",
+      "documentationUrl": "https://developer.android.com/jetpack/androidx/releases/room",
+      "companionPlugins": [
+        { "alias": "ksp", "pluginId": "com.google.devtools.ksp", "required": true }
+      ],
+      "processors": [
+        { "group": "androidx.room", "artifact": "room-compiler", "configuration": "ksp", "required": true }
+      ]
+    },
+    {
+      "id": "sqldelight-runtime",
+      "group": "app.cash.sqldelight",
+      "artifact": "runtime",
+      "preferredConfiguration": "implementation",
+      "documentationUrl": "https://cashapp.github.io/sqldelight/",
+      "companionPlugins": [
+        { "alias": "sqldelight", "pluginId": "app.cash.sqldelight", "required": true }
+      ]
+    },
+    {
+      "id": "compose-bom",
+      "group": "androidx.compose",
+      "artifact": "compose-bom",
+      "preferredConfiguration": "implementation",
+      "documentationUrl": "https://developer.android.com/develop/ui/compose/bom",
+      "bom": { "group": "androidx.compose", "artifact": "compose-bom", "enforced": false }
+    },
+    {
+      "id": "ktor-client-core",
+      "group": "io.ktor",
+      "artifact": "ktor-client-core",
+      "preferredConfiguration": "implementation",
+      "documentationUrl": "https://ktor.io/docs/client-dependencies.html"
+    },
+    {
+      "id": "coil-compose-core",
+      "group": "io.coil-kt.coil3",
+      "artifact": "coil-compose-core",
+      "preferredConfiguration": "implementation",
+      "documentationUrl": "https://coil-kt.github.io/coil/compose/"
+    }
+  ]
+}

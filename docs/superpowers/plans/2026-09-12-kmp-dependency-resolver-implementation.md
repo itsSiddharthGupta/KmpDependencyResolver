@@ -291,17 +291,17 @@ git commit -m "feat: merge and rank dependency search results"
 **Interfaces:**
 - Produces: `DependencyRecipe`, `CompanionPlugin`, `ProcessorRequirement`, `BomRule`, `RecipeRegistry.find(coordinates)`, and `RecipeValidator.validate(recipe)`.
 
-- [ ] **Step 1: Write failing schema and safety tests**
+- [x] **Step 1: Write failing schema and safety tests**
 
 Test valid recipes for Kotlin serialization, Room+KSP, and Compose BOM. Reject unknown operation kinds, non-HTTPS documentation URLs, absolute paths, raw Gradle script text, duplicate recipe IDs, payloads over 1 MiB, and unsupported schema versions.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `./gradlew :core:test :providers:test --tests '*Recipe*Test'`
 
 Expected: compilation fails on missing recipe types.
 
-- [ ] **Step 3: Implement the closed recipe model**
+- [x] **Step 3: Implement the closed recipe model**
 
 ```kotlin
 data class DependencyRecipe(
@@ -320,17 +320,17 @@ interface RecipeRegistry {
 }
 ```
 
-- [ ] **Step 4: Implement strict JSON loading and bundled recipes**
+- [x] **Step 4: Implement strict JSON loading and bundled recipes**
 
 Use kotlinx.serialization with `ignoreUnknownKeys=false`; read at most 1 MiB before decoding. Add reviewed bundled recipes for Kotlin serialization, Room with KSP, SQLDelight, Compose BOM, Ktor, and Coil. Every recipe includes an HTTPS source URL and only structured operations.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `./gradlew :core:test :providers:test`
 
 Expected: valid recipes load; every unsafe fixture is rejected with a specific validation code.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add core/src providers/src plugin/src/main/resources/recipes
