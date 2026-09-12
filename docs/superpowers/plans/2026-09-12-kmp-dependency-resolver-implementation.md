@@ -500,23 +500,23 @@ git commit -m "feat: search klibs and isolate provider failures"
 **Interfaces:**
 - Produces: `ProjectModelReader.read(project): ProjectSnapshot` and `ProjectSnapshot.addCapability(moduleId): AddCapability`.
 
-- [ ] **Step 1: Create minimal project fixtures**
+- [x] **Step 1: Create minimal project fixtures**
 
 Each supported fixture contains `settings.gradle.kts`, `gradle/libs.versions.toml`, and module `build.gradle.kts`. The hierarchical fixture defines `commonMain`, `iosMain`, `iosArm64Main`, `iosSimulatorArm64Main`, `androidMain`, and `jvmMain`. The unsupported fixture uses `build.gradle` and must be copy-only.
 
-- [ ] **Step 2: Write failing light-platform tests**
+- [x] **Step 2: Write failing light-platform tests**
 
 Assert module IDs, active build file, standard catalog path, plugin/Kotlin/AGP versions, target families, `dependsOn` edges, existing aliases, configurations, and precise copy-only reasons.
 
-- [ ] **Step 3: Implement public-API project discovery**
+- [x] **Step 3: Implement public-API project discovery**
 
 Use `ModuleManager`, `ProjectFileIndex`, and public External System/Gradle APIs to locate linked Gradle modules and build files. Do not import `impl`, `internal`, or `@ApiStatus.Internal` classes. Resolve the catalog only at `<root>/gradle/libs.versions.toml`.
 
-- [ ] **Step 4: Implement Kotlin DSL PSI inspection**
+- [x] **Step 4: Implement Kotlin DSL PSI inspection**
 
 Use Kotlin PSI call expressions to identify `kotlin {}`, target calls, `sourceSets {}`, named source sets, `dependsOn(...)`, and dependency blocks. Constant calls such as `iosArm64()` map directly. Also recognize the common literal `listOf(iosArm64(), iosSimulatorArm64()).forEach { ... }` form without executing Gradle code. Other dynamic loops may supplement names from IDE source roots but become copy-only if their hierarchy cannot be established confidently.
 
-- [ ] **Step 5: Run plugin tests and API checks**
+- [x] **Step 5: Run plugin tests and API checks**
 
 Run: `./gradlew :plugin:test verifyPluginProjectConfiguration`
 
@@ -524,7 +524,7 @@ Run: `rg -n '(^|\.)impl\.|ApiStatus\.Internal|IntellijInternalApi' plugin/src/ma
 
 Expected: fixture tests pass and the restricted-API search returns no matches.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add plugin/src
