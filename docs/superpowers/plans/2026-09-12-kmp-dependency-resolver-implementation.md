@@ -152,7 +152,7 @@ git commit -m "build: scaffold dependency resolver plugin"
 **Interfaces:**
 - Produces: `Coordinates`, `TargetFamily`, `EvidenceKind`, `Candidate`, `SourceSetNode`, `ModuleModel`, `PlacementRecommendation`, and `SourceSetRecommender.recommend(candidate, module)`.
 
-- [ ] **Step 1: Write failing placement tests**
+- [x] **Step 1: Write failing placement tests**
 
 Cover: all targets → `commonMain`; Android only → `androidMain`; iOS device and simulator → `iosMain`; Android+JVM partial coverage → a matching custom intermediate source set; unknown coverage → warning; no covering node → incompatible.
 
@@ -164,13 +164,13 @@ Cover: all targets → `commonMain`; Android only → `androidMain`; iOS device 
 }
 ```
 
-- [ ] **Step 2: Run tests and confirm the missing types failure**
+- [x] **Step 2: Run tests and confirm the missing types failure**
 
 Run: `./gradlew :core:test --tests '*SourceSetRecommenderTest'`
 
 Expected: compilation fails because the domain types do not exist.
 
-- [ ] **Step 3: Implement immutable domain types**
+- [x] **Step 3: Implement immutable domain types**
 
 ```kotlin
 data class Coordinates(val group: String, val artifact: String) {
@@ -194,17 +194,17 @@ data class PlacementRecommendation(
 )
 ```
 
-- [ ] **Step 4: Implement deterministic recommendation**
+- [x] **Step 4: Implement deterministic recommendation**
 
 Filter source sets whose descendant targets are nonempty and fully contained in candidate coverage. Choose the valid node with the largest descendant-target count, then shortest distance from `commonMain`, then lexicographic name. Preserve `UNKNOWN`; return `INCOMPATIBLE` when verified coverage has no valid node.
 
-- [ ] **Step 5: Run core tests**
+- [x] **Step 5: Run core tests**
 
 Run: `./gradlew :core:test`
 
 Expected: all placement tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add core/src
