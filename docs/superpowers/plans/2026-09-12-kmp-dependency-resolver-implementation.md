@@ -352,15 +352,15 @@ git commit -m "feat: add safe dependency recipe registry"
 **Interfaces:**
 - Produces: `HttpTransport.execute(HttpRequestSpec): HttpPayload`, `SearchCache.get(key, now)`, and `SearchCache.put(entry)`.
 
-- [ ] **Step 1: Write failing transport security tests**
+- [x] **Step 1: Write failing transport security tests**
 
-Using MockWebServer, verify 5-second connect and 10-second request timeouts, 2 MiB response limit, gzip handling, cancellation, user agent, and rejection of HTTP URLs, cross-host redirects, and non-JSON content types where JSON is required.
+Using an injected sender and in-memory response streams, verify the 5-second connect and 10-second request timeouts, 2 MiB response limit, gzip handling, cancellation, user agent, and rejection of HTTP URLs, redirects, and non-JSON content types where JSON is required.
 
-- [ ] **Step 2: Write failing cache tests**
+- [x] **Step 2: Write failing cache tests**
 
 Verify provider/query/target filters form the key; fresh and stale entries are distinguished; corrupt files are ignored; writes replace atomically; a 50 MiB LRU ceiling evicts oldest entries.
 
-- [ ] **Step 3: Implement the transport contract**
+- [x] **Step 3: Implement the transport contract**
 
 ```kotlin
 data class HttpRequestSpec(
@@ -375,17 +375,17 @@ data class HttpPayload(val status: Int, val headers: Map<String, List<String>>, 
 interface HttpTransport { fun execute(request: HttpRequestSpec): HttpPayload }
 ```
 
-- [ ] **Step 4: Implement the cache under an injected directory**
+- [x] **Step 4: Implement the cache under an injected directory**
 
 Store one schema-versioned JSON envelope per SHA-256 key. Write to a sibling temporary file and atomically move it over the target. Keep provider TTL in the entry and expose stale data without silently labeling it fresh.
 
-- [ ] **Step 5: Run provider tests**
+- [x] **Step 5: Run provider tests**
 
 Run: `./gradlew :providers:test`
 
 Expected: all transport and cache tests pass without external network access.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src
