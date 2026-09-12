@@ -1,0 +1,1 @@
+{"formatVersion":"1.1","component":{"group":"io.ktor","module":"ktor-client-core","version":"3.1.0"},"variants":[{"name":"jvmApi","attributes":{"org.jetbrains.kotlin.platform.type":"jvm"}},{"name":"iosApi","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"ios_arm64"}}]}

@@ -1,0 +1,6 @@
+{"schemaVersion":"1.1.0","projectTargets":[
+  {"platformType":"native","extras":{"native":{"konanTarget":"ios_arm64"}}},
+  {"platformType":"native","extras":{"native":{"konanTarget":"ios_x64"}}},
+  {"platformType":"native","extras":{"native":{"konanTarget":"ios_simulator_arm64"}}},
+  {"platformType":"jvm"},{"platformType":"js"},{"platformType":"wasm"}
+]}

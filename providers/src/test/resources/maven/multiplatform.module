@@ -1,0 +1,16 @@
+{
+  "formatVersion":"1.1",
+  "component":{"group":"org.jetbrains.kotlinx","module":"kotlinx-serialization-json","version":"1.9.0"},
+  "variants":[
+    {"name":"androidApi","attributes":{"org.jetbrains.kotlin.platform.type":"androidJvm"}},
+    {"name":"jvmApi","attributes":{"org.jetbrains.kotlin.platform.type":"jvm"}},
+    {"name":"iosArm64Api","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"ios_arm64"}},
+    {"name":"iosX64Api","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"ios_x64"}},
+    {"name":"iosSimulatorArm64Api","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"ios_simulator_arm64"}},
+    {"name":"linuxApi","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"linux_x64"}},
+    {"name":"macosApi","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"macos_arm64"}},
+    {"name":"mingwApi","attributes":{"org.jetbrains.kotlin.platform.type":"native","org.jetbrains.kotlin.native.target":"mingw_x64"}},
+    {"name":"jsApi","attributes":{"org.jetbrains.kotlin.platform.type":"js"}},
+    {"name":"wasmApi","attributes":{"org.jetbrains.kotlin.platform.type":"wasm"}}
+  ]
+}

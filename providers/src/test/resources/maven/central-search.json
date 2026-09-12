@@ -1,0 +1,4 @@
+{"response":{"docs":[
+  {"g":"io.ktor","a":"ktor-client-core","latestVersion":"3.1.0"},
+  {"g":"io.ktor","a":"ktor-client-preview","latestVersion":"3.2.0-RC1"}
+]}}

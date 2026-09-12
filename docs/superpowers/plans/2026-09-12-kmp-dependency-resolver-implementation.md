@@ -410,29 +410,29 @@ git commit -m "feat: add secure HTTP transport and search cache"
 - Consumes: `HttpTransport`, `SearchCache`, `SearchProvider`, and domain candidates.
 - Produces: `PublicationEvidenceReader.read(coordinates, version)` and two provider implementations.
 
-- [ ] **Step 1: Record sanitized contract fixtures**
+- [x] **Step 1: Record sanitized contract fixtures**
 
 Include Central search plus `.module` and tooling metadata for kotlinx.serialization, Ktor, AndroidX lifecycle, Coil, an Android-only artifact, and a deliberately malformed publication. Include Google `master-index.xml`, group index, and `maven-metadata.xml` fixtures.
 
-- [ ] **Step 2: Write failing provider and metadata tests**
+- [x] **Step 2: Write failing provider and metadata tests**
 
 Assert exact query URL encoding, stable/pre-release classification, canonical root publication mapping, target-family extraction, provider provenance, 24-hour search TTL, and graceful candidate-level failure for malformed metadata.
 
-- [ ] **Step 3: Implement Central and Google discovery**
+- [x] **Step 3: Implement Central and Google discovery**
 
 Central uses `https://search.maven.org/solrsearch/select` and `https://repo1.maven.org/maven2/`. Google uses `https://dl.google.com/dl/android/maven2/master-index.xml`, group indexes, and artifact metadata. Both return normalized candidates without guessing target coverage.
 
-- [ ] **Step 4: Implement evidence extraction**
+- [x] **Step 4: Implement evidence extraction**
 
 Map Gradle attributes and Kotlin target names to `TargetFamily`; map `iosArm64`, `iosX64`, and `iosSimulatorArm64` to IOS while retaining raw names in provenance details. Prefer `.module`, supplement with `-kotlin-tooling-metadata.json`, and label unsupported or contradictory payloads `UNKNOWN` rather than verified.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `./gradlew :providers:test --tests '*maven*'`
 
 Expected: fixture-only tests pass and malformed metadata does not fail the provider result.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src
