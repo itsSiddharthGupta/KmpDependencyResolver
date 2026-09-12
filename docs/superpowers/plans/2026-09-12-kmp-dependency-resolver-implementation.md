@@ -226,17 +226,17 @@ git commit -m "feat: recommend KMP dependency source sets"
 - Consumes: `Candidate`, `Coordinates`, `TargetFamily`, `EvidenceKind` from Task 2.
 - Produces: `SearchRequest`, `ProviderResult`, `SearchProvider.search(request)`, `CandidateMerger.merge(results)`, and `CandidateRanker.rank(query, module, candidates)`.
 
-- [ ] **Step 1: Write failing merge and ranking tests**
+- [x] **Step 1: Write failing merge and ranking tests**
 
 Assert that identical coordinates from klibs and Central merge into one candidate, union provenance, keep the newest stable version, and prefer `VERIFIED` over `CURATED`. Assert ranking order: exact artifact match, compatible stable candidate, compatible preview, unknown, incompatible.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `./gradlew :core:test --tests '*Candidate*Test'`
 
 Expected: compilation fails on missing search contracts.
 
-- [ ] **Step 3: Implement provider contracts**
+- [x] **Step 3: Implement provider contracts**
 
 ```kotlin
 data class SearchRequest(
@@ -259,17 +259,17 @@ fun interface SearchProvider {
 }
 ```
 
-- [ ] **Step 4: Implement merge and stable ranking keys**
+- [x] **Step 4: Implement merge and stable ranking keys**
 
 Use `Coordinates` as the deduplication key. Merge only facts with provenance, order semantic versions through a tested tolerant comparator, and score evidence as verified 4, curated 3, inferred 2, unknown 1, incompatible 0. Keep deterministic coordinate ordering as the final tie-breaker.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `./gradlew :core:test`
 
 Expected: all tests pass and repeated shuffled inputs yield identical output ordering.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add core/src
