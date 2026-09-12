@@ -455,29 +455,29 @@ git commit -m "feat: search Maven repositories and verify KMP targets"
 - Consumes: Task 3 search contracts and Task 5 transport/cache.
 - Produces: `McpClient.callTool(name, arguments)`, `KlibsProvider`, and `ProviderSearchCoordinator.search(request): AggregatedSearchResult`.
 
-- [ ] **Step 1: Capture MCP fixtures**
+- [x] **Step 1: Capture MCP fixtures**
 
 Record stateless Streamable HTTP responses for `initialize`, `tools/list`, `searchProjects`, and `getLatestVersion` from `https://api.klibs.io/mcp`. Sanitize request IDs and retain protocol/content-type headers.
 
-- [ ] **Step 2: Write failing MCP and isolation tests**
+- [x] **Step 2: Write failing MCP and isolation tests**
 
 Verify protocol initialization, tool capability lookup rather than assumed positional fields, search target filters, mapping of package coordinates and supported targets, 6-hour cache TTL, and useful results when klibs, Central, or Google throws or times out.
 
-- [ ] **Step 3: Implement the minimal stateless MCP client**
+- [x] **Step 3: Implement the minimal stateless MCP client**
 
 Send JSON-RPC 2.0 requests over HTTPS Streamable HTTP with `Accept: application/json, text/event-stream`; support JSON and single-result SSE payloads; reject server requests, notifications requiring action, payloads over 2 MiB, and unexpected tool result schemas.
 
-- [ ] **Step 4: Implement klibs mapping and aggregation**
+- [x] **Step 4: Implement klibs mapping and aggregation**
 
 Use `searchProjects` for discovery and `getLatestVersion` only when search lacks version data. Merge all completed providers through `CandidateMerger`; return a failure entry per failed provider. Execute providers on an injected bounded executor and cancel outstanding work when the caller cancels.
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `./gradlew :providers:test`
 
 Expected: all provider tests pass offline; failure of each provider in turn still returns candidates from the others.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src

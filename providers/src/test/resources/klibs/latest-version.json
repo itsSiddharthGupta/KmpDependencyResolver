@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{\"groupId\":\"org.jetbrains.kotlinx\",\"artifactId\":\"kotlinx-serialization-json\",\"latestVersion\":{\"version\":\"1.12.0-RC\"},\"latestStableVersion\":{\"version\":\"1.11.0\"},\"packageFound\":true}"}],"isError":false}}

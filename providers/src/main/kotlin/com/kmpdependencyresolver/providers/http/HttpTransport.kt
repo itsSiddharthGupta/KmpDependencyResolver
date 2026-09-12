@@ -6,6 +6,7 @@ data class HttpRequestSpec(
     val uri: URI,
     val method: String = "GET",
     val body: ByteArray? = null,
+    val headers: Map<String, String> = emptyMap(),
     val expectedContentTypes: Set<String>,
     val maxBytes: Int = 2 * 1024 * 1024,
 )

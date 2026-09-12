@@ -23,10 +23,12 @@ class JdkHttpTransport(
             throw HttpTransportException("HTTPS_REQUIRED", "Only HTTPS endpoints are allowed.")
         }
 
-        val httpRequest = HttpRequest.newBuilder(request.uri)
+        val requestBuilder = HttpRequest.newBuilder(request.uri)
             .timeout(Duration.ofSeconds(10))
             .header("Accept-Encoding", "gzip")
             .header("User-Agent", "KMP-Dependency-Resolver/0.1.0")
+        request.headers.forEach(requestBuilder::header)
+        val httpRequest = requestBuilder
             .method(
                 request.method,
                 request.body?.let(HttpRequest.BodyPublishers::ofByteArray)
