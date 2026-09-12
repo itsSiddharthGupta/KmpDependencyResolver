@@ -546,17 +546,17 @@ git commit -m "feat: inspect KMP project source-set models"
 - Consumes: candidates, placement recommendations, recipes, and catalog/module snapshots.
 - Produces: `ChangePlanner.plan(selection, project): PlanResult`; sealed `CatalogOperation`; sealed `GradleOperation`; `ChangePlan`; `PlanConflict`.
 
-- [ ] **Step 1: Write failing planner tests**
+- [x] **Step 1: Write failing planner tests**
 
 Cover direct library, equivalent alias reuse, shared version reuse, deterministic kebab-case alias, conflicting existing version, alias collision, BOM `platform(...)`, Room library+compiler+KSP plugin, serialization plugin, unsupported configuration, unknown override, and incompatible override.
 
-- [ ] **Step 2: Run focused tests**
+- [x] **Step 2: Run focused tests**
 
 Run: `./gradlew :core:test --tests '*change*'`
 
 Expected: compilation fails on missing change operations.
 
-- [ ] **Step 3: Implement the closed operation model**
+- [x] **Step 3: Implement the closed operation model**
 
 ```kotlin
 sealed interface CatalogOperation {
@@ -571,17 +571,17 @@ sealed interface GradleOperation {
 }
 ```
 
-- [ ] **Step 4: Implement equivalence, aliasing, and conflicts**
+- [x] **Step 4: Implement equivalence, aliasing, and conflicts**
 
 Normalize catalog aliases to Gradle accessor semantics before comparing. Reuse a library only when group, artifact, and resolved version are equivalent. Never change an existing version as a side effect. Generate aliases from group-independent artifact names, suffix with a minimal stable group token on collision, and return a conflict when ambiguity remains.
 
-- [ ] **Step 5: Run core tests**
+- [x] **Step 5: Run core tests**
 
 Run: `./gradlew :core:test`
 
 Expected: all planner tests pass and plan operation ordering is deterministic.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add core/src
