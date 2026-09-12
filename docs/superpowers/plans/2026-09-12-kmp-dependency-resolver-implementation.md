@@ -6,7 +6,7 @@
 
 **Architecture:** A pure Kotlin `core` module owns normalized metadata, compatibility, ranking, recipes, and structured change plans. A JVM `providers` module implements client-only klibs.io MCP, Maven Central, Google Maven, metadata, cache, and provider isolation behind injected transports. The `plugin` module adapts public JetBrains project/PSI APIs, renders the Swing tool window, and applies validated plans as one undoable write command.
 
-**Tech Stack:** Kotlin/JVM 2.2.21, Java 21 bytecode, Gradle 9.5.0, IntelliJ Platform Gradle Plugin 2.18.1, IntelliJ Platform 2025.2.5 compile target, Java `HttpClient`, kotlinx.serialization 1.9.0, JUnit 5.12.2, AssertJ 3.27.3, MockWebServer 5.1.0, JetBrains Platform Test Framework and Plugin Verifier.
+**Tech Stack:** Kotlin/JVM 2.1.20, Java 21 bytecode, Gradle 9.5.1, IntelliJ Platform Gradle Plugin 2.18.1, IntelliJ Platform 2025.2.5 compile target, Java `HttpClient`, kotlinx.serialization 1.9.0, JUnit 5.12.2, AssertJ 3.27.3, MockWebServer 5.1.0, JetBrains Platform Test Framework and Plugin Verifier.
 
 **Spec:** `docs/superpowers/specs/2026-09-12-kmp-dependency-resolver-design.md`
 
@@ -79,12 +79,12 @@ KmpDependencyResolver/
 - Create: `plugin/src/main/resources/META-INF/plugin.xml`
 - Create: `core/src/test/kotlin/com/kmpdependencyresolver/core/BuildSmokeTest.kt`
 - Create: `.gitignore`
-- Create: Gradle wrapper files with Gradle 9.5.0
+- Create: Gradle wrapper files with Gradle 9.5.1
 
 **Interfaces:**
 - Produces: three Gradle modules `:core`, `:providers`, `:plugin`; plugin ID `com.kmpdependencyresolver`; test command `./gradlew test`.
 
-- [ ] **Step 1: Write the build smoke test**
+- [x] **Step 1: Write the build smoke test**
 
 ```kotlin
 package com.kmpdependencyresolver.core
@@ -99,15 +99,15 @@ class BuildSmokeTest {
 }
 ```
 
-- [ ] **Step 2: Create the version catalog and module settings**
+- [x] **Step 2: Create the version catalog and module settings**
 
-Define versions `kotlin=2.2.21`, `intellijPlatform=2.18.1`, `serialization=1.9.0`, `junit=5.12.2`, `assertj=3.27.3`, and `mockWebServer=5.1.0`. Include `:core`, `:providers`, and `:plugin`; use Maven Central, Gradle Plugin Portal, and `intellijPlatform.defaultRepositories()`.
+Define versions `kotlin=2.1.20`, `intellijPlatform=2.18.1`, `serialization=1.9.0`, `junit=5.12.2`, `assertj=3.27.3`, and `mockWebServer=5.1.0`. Include `:core`, `:providers`, and `:plugin`; use Maven Central, Gradle Plugin Portal, and `intellijPlatform.defaultRepositories()`.
 
-- [ ] **Step 3: Configure the modules**
+- [x] **Step 3: Configure the modules**
 
 Apply Kotlin/JVM to all modules, Kotlin serialization to `providers`, and `org.jetbrains.intellij.platform` only to `plugin`. Set JVM toolchain and Kotlin bytecode target to 21. Make `providers` depend on `core`; make `plugin` depend on both. Configure the plugin against IntelliJ IDEA Community 2025.2.5 with bundled `com.intellij.java`, `com.intellij.gradle`, `org.jetbrains.kotlin`, and `org.toml.lang` plugins plus the Platform test framework.
 
-- [ ] **Step 4: Declare the plugin descriptor**
+- [x] **Step 4: Declare the plugin descriptor**
 
 ```xml
 <idea-plugin>
@@ -124,15 +124,15 @@ Apply Kotlin/JVM to all modules, Kotlin serialization to `providers`, and `org.j
 </idea-plugin>
 ```
 
-- [ ] **Step 5: Generate the wrapper and prove the skeleton**
+- [x] **Step 5: Generate the wrapper and prove the skeleton**
 
-Run: `gradle wrapper --gradle-version 9.5.0`
+Run: `gradle wrapper --gradle-version 9.5.1`
 
 Run: `./gradlew clean test verifyPluginProjectConfiguration buildPlugin`
 
 Expected: smoke test passes, configuration verification passes, and `plugin/build/distributions/KMP-Dependency-Resolver-0.1.0.zip` exists.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add .gitignore settings.gradle.kts build.gradle.kts gradle.properties gradle core providers plugin gradlew gradlew.bat

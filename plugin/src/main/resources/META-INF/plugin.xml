@@ -1,0 +1,12 @@
+<idea-plugin>
+  <id>com.kmpdependencyresolver</id>
+  <name>KMP Dependency Resolver</name>
+  <vendor>itsSiddharthGupta</vendor>
+  <description>Discover and safely add Kotlin Multiplatform dependencies.</description>
+  <idea-version since-build="252" until-build="262.*"/>
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.java</depends>
+  <depends>com.intellij.gradle</depends>
+  <depends>org.jetbrains.kotlin</depends>
+  <depends optional="true" config-file="toml-support.xml">org.toml.lang</depends>
+</idea-plugin>
