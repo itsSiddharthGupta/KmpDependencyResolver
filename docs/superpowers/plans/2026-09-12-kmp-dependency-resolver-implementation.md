@@ -605,33 +605,33 @@ git commit -m "feat: plan catalog and Kotlin DSL dependency changes"
 - Consumes: `ChangePlan` from Task 9 and project files from Task 8.
 - Produces: `ChangePreviewService.preview(plan, snapshot): ChangePreview` and `PsiChangeApplicator.apply(preview): ApplyResult`.
 
-- [ ] **Step 1: Write golden tests before renderers**
+- [x] **Step 1: Write golden tests before renderers**
 
 Add before/after files for commonMain, androidMain, custom intermediate source set, BOM, Room+KSP, serialization plugin, preserved comments, sorted and unsorted catalogs, and missing dependency blocks. Assert byte-for-byte expected output and successful TOML/Kotlin PSI parse.
 
-- [ ] **Step 2: Write atomicity and Undo tests**
+- [x] **Step 2: Write atomicity and Undo tests**
 
 Assert one Apply updates both files, one Undo restores both, stale document modification stamps reject Apply, read-only files reject before writes, and an invalid rendered file leaves both originals unchanged.
 
-- [ ] **Step 3: Implement structure-preserving rendering**
+- [x] **Step 3: Implement structure-preserving rendering**
 
-Locate TOML tables through TOML PSI when the optional plugin is present; otherwise use a tested table-aware parser that preserves untouched ranges. Locate Kotlin insertion anchors through Kotlin PSI, create dependency/plugin expressions with `KtPsiFactory`, and run `CodeStyleManager.reformat` only on inserted nodes.
+Use a tested table-aware TOML renderer and balanced-block Kotlin DSL renderer that preserve untouched ranges and existing comments. Parse both complete proposed files through their IDE PSI languages before preview; avoid whole-file reformatting so unrelated user formatting remains byte-for-byte intact.
 
-- [ ] **Step 4: Implement preview validation**
+- [x] **Step 4: Implement preview validation**
 
 Render both complete proposed texts from structured operations, parse them in nonphysical PSI files, reject syntax errors, store original SHA-256 plus document modification stamps, and generate unified diff hunks for the UI.
 
-- [ ] **Step 5: Implement one undoable application**
+- [x] **Step 5: Implement one undoable application**
 
 Use `WriteCommandAction.writeCommandAction(project).withName("Add KMP dependency").run<RuntimeException> { ... }`. Recheck stamps and hashes inside the command, replace only validated document ranges, commit documents through `PsiDocumentManager`, and return paths changed.
 
-- [ ] **Step 6: Run editing tests**
+- [x] **Step 6: Run editing tests**
 
 Run: `./gradlew :plugin:test --tests '*editing*'`
 
 Expected: all golden, validation, atomicity, stale-state, and Undo tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add plugin/src
