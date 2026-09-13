@@ -38,6 +38,7 @@ data class DependencySelection(
     val recipe: DependencyRecipe? = null,
     val overrideSourceSet: String? = null,
     val allowIncompatible: Boolean = false,
+    val selectedCompanionIds: Set<String> = emptySet(),
 )
 
 data class ChangePlan(

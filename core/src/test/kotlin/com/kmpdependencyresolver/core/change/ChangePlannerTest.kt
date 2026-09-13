@@ -107,6 +107,26 @@ class ChangePlannerTest {
     }
 
     @Test
+    fun `optional companion is added only when selected`() {
+        val processor = ProcessorRequirement(Coordinates("sample", "optional-processor"), "ksp", false)
+        val recipe = recipe(processors = listOf(processor))
+        val project = project(configurations = setOf("implementation", "ksp"))
+
+        val omitted = ChangePlanner().plan(selection("sample", "library", "1.0", recipe), project).plan!!
+        val selected = ChangePlanner().plan(
+            selection("sample", "library", "1.0", recipe).copy(
+                selectedCompanionIds = setOf("processor:sample:optional-processor"),
+            ),
+            project,
+        ).plan!!
+
+        assertThat(omitted.gradleOperations.filterIsInstance<GradleOperation.AddDependency>())
+            .noneMatch { it.configuration == "ksp" }
+        assertThat(selected.gradleOperations)
+            .contains(GradleOperation.AddDependency("commonMain", "ksp", "optional-processor", false))
+    }
+
+    @Test
     fun `unknown and incompatible placement require explicit override`() {
         val unknown = selection("sample", "library", "1.0").copy(
             recommendation = PlacementRecommendation(null, EvidenceKind.UNKNOWN, "unknown", true),

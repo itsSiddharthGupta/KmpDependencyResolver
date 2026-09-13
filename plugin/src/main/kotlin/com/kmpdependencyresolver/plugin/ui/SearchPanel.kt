@@ -4,6 +4,12 @@ import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
 import com.intellij.openapi.Disposable
+import com.intellij.notification.NotificationAction
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.project.Project
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.components.JBLabel
@@ -20,6 +26,7 @@ import java.util.concurrent.Executors
 import javax.swing.AbstractAction
 import javax.swing.DefaultListModel
 import javax.swing.JCheckBox
+import javax.swing.JButton
 import javax.swing.JComboBox
 import javax.swing.JMenuItem
 import javax.swing.JPanel
@@ -28,7 +35,7 @@ import javax.swing.KeyStroke
 import javax.swing.event.DocumentEvent
 import javax.swing.event.DocumentListener
 
-class SearchPanel(project: Project) : JPanel(BorderLayout()), Disposable {
+class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Disposable {
     private val service = project.service<DependencyResolverService>()
     private val query = SearchTextField(false)
     private val module = JComboBox<String>()
@@ -51,7 +58,7 @@ class SearchPanel(project: Project) : JPanel(BorderLayout()), Disposable {
 
         val snapshot = runCatching(service::projectSnapshot).getOrNull()
         snapshot?.modules?.forEach { module.addItem(it.id) }
-        service.activeModuleId(snapshot ?: returnSnapshot())?.let(module::setSelectedItem)
+        snapshot?.let(service::activeModuleId)?.let(module::setSelectedItem)
 
         val debounceScheduler = TaskScheduler { delay, task ->
             val future = scheduled.schedule(task, delay, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -65,12 +72,17 @@ class SearchPanel(project: Project) : JPanel(BorderLayout()), Disposable {
             DependencySearchGateway(service::search), debounceScheduler, workerScheduler,
             UiDispatcher { task -> ApplicationManager.getApplication().invokeLater(task) },
             activeModule = { service.activeModuleId() }, onState = ::render,
+            onAdd = ::addDependency,
         )
 
         val filters = JPanel().apply { add(module); add(target); add(previews) }
         val north = JPanel(BorderLayout()).apply { add(query, BorderLayout.NORTH); add(filters, BorderLayout.CENTER); add(status, BorderLayout.SOUTH) }
         add(north, BorderLayout.NORTH)
         add(JBScrollPane(results), BorderLayout.CENTER)
+        add(JPanel().apply {
+            add(JButton("Copy").apply { addActionListener { showCopyMenu() } })
+            add(JButton("Add…").apply { addActionListener { addSelectedDependency() } })
+        }, BorderLayout.SOUTH)
 
         query.textEditor.document.addDocumentListener(object : DocumentListener {
             override fun insertUpdate(e: DocumentEvent?) = search()
@@ -81,8 +93,6 @@ class SearchPanel(project: Project) : JPanel(BorderLayout()), Disposable {
         previews.addActionListener { search() }
         installKeyboardActions()
     }
-
-    private fun returnSnapshot() = com.kmpdependencyresolver.plugin.project.ProjectSnapshot("", null, emptyList(), emptyMap(), emptySet())
 
     private fun search() {
         presenter.onQueryChanged(query.text, selectedTargets(), previews.isSelected, module.selectedItem as? String)
@@ -119,8 +129,70 @@ class SearchPanel(project: Project) : JPanel(BorderLayout()), Disposable {
         })
         results.inputMap.put(KeyStroke.getKeyStroke("ENTER"), "confirmDependency")
         results.actionMap.put("confirmDependency", object : AbstractAction() {
-            override fun actionPerformed(event: ActionEvent?) { status.text = "Choose Add to review changes" }
+            override fun actionPerformed(event: ActionEvent?) = addSelectedDependency()
         })
+    }
+
+    private fun addSelectedDependency() {
+        results.selectedValue?.candidate?.coordinates?.notation?.let(presenter::add)
+    }
+
+    private fun addDependency(candidate: com.kmpdependencyresolver.core.model.Candidate, moduleId: String?) {
+        if (moduleId == null) {
+            Messages.showErrorDialog(project, "No Gradle module is available for Add. Copy is still available.", "Project not supported")
+            return
+        }
+        val flow = AddDependencyFlow(service)
+        var confirmation = try {
+            flow.start(candidate, moduleId)
+        } catch (exception: RuntimeException) {
+            showError(UserFacingError.from("UNSUPPORTED_PROJECT", exception))
+            return
+        }
+        while (true) {
+            val dialog = AddDependencyDialog(project, confirmation)
+            if (!dialog.showAndGet()) return
+            val preview = flow.preview(dialog.options(), confirmation)
+            if (!preview.applyEnabled) {
+                showError(preview.error ?: UserFacingError.from("UNEXPECTED"))
+                continue
+            }
+            if (!ChangePreviewDialog(project, preview).showAndGet()) return
+            when (val outcome = flow.apply(preview)) {
+                is AddApplyOutcome.Success -> {
+                    showSuccess(outcome)
+                    return
+                }
+                is AddApplyOutcome.Stale -> confirmation = outcome.confirmation
+                is AddApplyOutcome.Failure -> {
+                    showError(outcome.error)
+                    return
+                }
+            }
+        }
+    }
+
+    private fun showSuccess(outcome: AddApplyOutcome.Success) {
+        val notification = NotificationGroupManager.getInstance()
+            .getNotificationGroup("KMP Dependency Resolver")
+            .createNotification(
+                "Dependency added",
+                "Changed ${outcome.relativePaths.joinToString()}",
+                NotificationType.INFORMATION,
+            )
+        if (outcome.suggestGradleSync) {
+            notification.addAction(NotificationAction.createSimple("Sync Gradle project") {
+                ActionManager.getInstance().getAction("ExternalSystem.RefreshAllProjects")?.let { action ->
+                    ActionManager.getInstance().tryToExecute(action, null, this, null, true)
+                }
+            })
+        }
+        notification.notify(project)
+    }
+
+    private fun showError(error: UserFacingError) {
+        LOG.warn("${error.code}: dependency Add stopped", error.cause)
+        Messages.showErrorDialog(project, "${error.message}\n\nDiagnostic: ${error.code}", error.title)
     }
 
     private fun showCopyMenu() {
@@ -143,5 +215,9 @@ class SearchPanel(project: Project) : JPanel(BorderLayout()), Disposable {
         presenter.cancel()
         scheduled.shutdownNow()
         workers.shutdownNow()
+    }
+
+    private companion object {
+        val LOG = Logger.getInstance(SearchPanel::class.java)
     }
 }

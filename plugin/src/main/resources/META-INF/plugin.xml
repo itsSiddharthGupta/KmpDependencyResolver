@@ -13,6 +13,7 @@
     <toolWindow id="KMP Dependencies"
                 anchor="right"
                 factoryClass="com.kmpdependencyresolver.plugin.ui.DependencyToolWindowFactory"/>
+    <notificationGroup id="KMP Dependency Resolver" displayType="BALLOON"/>
   </extensions>
   <extensions defaultExtensionNs="org.jetbrains.kotlin">
     <supportsKotlinPluginMode supportsK2="true"/>

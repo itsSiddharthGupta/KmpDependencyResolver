@@ -36,10 +36,12 @@ class SearchPresenter(
     private val ui: UiDispatcher,
     private val activeModule: () -> String?,
     private val onState: (SearchUiState) -> Unit,
+    private val onAdd: (Candidate, String?) -> Unit = { _, _ -> },
 ) {
     private var generation = 0L
     private var pendingDebounce: Cancellable? = null
     private var pendingSearch: Cancellable? = null
+    private var state = SearchUiState()
 
     fun onQueryChanged(
         query: String,
@@ -51,7 +53,7 @@ class SearchPresenter(
         pendingDebounce?.cancel()
         pendingSearch?.cancel()
         val selectedModule = moduleId ?: activeModule()
-        onState(SearchUiState(query, selectedModule, searching = query.isNotBlank()))
+        publish(SearchUiState(query, selectedModule, searching = query.isNotBlank()))
         if (query.isBlank()) return
         pendingDebounce = debounceScheduler.schedule(300) {
             pendingSearch = worker.schedule(0) {
@@ -60,7 +62,7 @@ class SearchPresenter(
                     if (generation != currentGeneration) return@dispatch
                     val items = result.candidates.map { candidate -> item(candidate, requiredTargets) }
                         .sortedWith(compareBy({ it.group.ordinal }, { it.candidate.coordinates.notation }))
-                    onState(
+                    publish(
                         SearchUiState(
                             query, selectedModule, false, items,
                             ResultGroup.entries.associateWith { group -> items.filter { it.group == group } },
@@ -76,6 +78,16 @@ class SearchPresenter(
         generation++
         pendingDebounce?.cancel()
         pendingSearch?.cancel()
+    }
+
+    fun add(candidateId: String) {
+        state.results.firstOrNull { it.candidate.coordinates.notation == candidateId }
+            ?.let { onAdd(it.candidate, state.moduleId) }
+    }
+
+    private fun publish(next: SearchUiState) {
+        state = next
+        onState(next)
     }
 
     private fun item(candidate: Candidate, required: Set<TargetFamily>): SearchResultItem {

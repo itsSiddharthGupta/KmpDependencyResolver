@@ -47,6 +47,24 @@ class SearchPresenterTest {
         assertThat(state.results.first().evidenceLabel).isIn("Verified", "Unknown", "Incompatible")
     }
 
+    @Test
+    fun `add resolves a visible candidate and active module`() {
+        val tasks = ManualTasks()
+        val additions = mutableListOf<Pair<Candidate, String?>>()
+        val result = candidate("ktor", EvidenceKind.VERIFIED, setOf(TargetFamily.JVM))
+        val presenter = SearchPresenter(
+            DependencySearchGateway { AggregatedSearchResult(listOf(result), emptyList()) },
+            tasks, tasks, tasks, { ":shared" }, {},
+            onAdd = { candidate, module -> additions += candidate to module },
+        )
+
+        presenter.onQueryChanged("ktor", emptySet(), false)
+        tasks.runLatest(); tasks.runLatest(); tasks.runLatest()
+        presenter.add("sample:ktor")
+
+        assertThat(additions).containsExactly(result to ":shared")
+    }
+
     private fun candidate(name: String, evidence: EvidenceKind, targets: Set<TargetFamily>) = Candidate(
         Coordinates("sample", name), name, listOf(DependencyVersion("1.0", true)), targets, evidence,
         setOf(Provenance("fixture")),

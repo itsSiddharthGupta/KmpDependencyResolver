@@ -53,14 +53,18 @@ class ChangePlanner(private val aliasGenerator: AliasGenerator = AliasGenerator(
         addLibrary(selection.candidate.coordinates, if (recipe?.bom == null) selection.version else null, configuration, false)
             ?.let { return PlanResult(null, listOf(it)) }
 
-        recipe?.processors.orEmpty().filter { it.required }.sortedBy { it.coordinates.notation }.forEach { processor ->
+        recipe?.processors.orEmpty()
+            .filter { it.required || "processor:${it.coordinates.notation}" in selection.selectedCompanionIds }
+            .sortedBy { it.coordinates.notation }.forEach { processor ->
             if (processor.configuration !in project.configurations) {
                 return conflict("UNSUPPORTED_CONFIGURATION", "Configuration '${processor.configuration}' is required by ${processor.coordinates.notation}.")
             }
             addLibrary(processor.coordinates, selection.version, processor.configuration, false)
                 ?.let { return PlanResult(null, listOf(it)) }
         }
-        recipe?.companionPlugins.orEmpty().filter { it.required }.sortedBy { it.alias }.forEach { plugin ->
+        recipe?.companionPlugins.orEmpty()
+            .filter { it.required || "plugin:${it.alias}" in selection.selectedCompanionIds }
+            .sortedBy { it.alias }.forEach { plugin ->
             val existing = project.catalog.plugins.entries.firstOrNull { it.value.pluginId == plugin.pluginId }
                 ?: return conflict("MISSING_PLUGIN_VERSION", "A versioned catalog plugin entry is required for ${plugin.pluginId}.")
             gradle += GradleOperation.AddPluginAlias(existing.key, applyFalse = false)

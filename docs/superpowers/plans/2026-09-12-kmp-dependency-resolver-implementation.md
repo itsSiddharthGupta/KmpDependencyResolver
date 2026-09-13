@@ -714,27 +714,27 @@ git commit -m "feat: add dependency search and copy tool window"
 - Consumes: recommendation, recipe, planner, preview service, applicator.
 - Produces: end-to-end `SearchPresenter.add(candidateId)` flow and deterministic user-facing error mapping.
 
-- [ ] **Step 1: Write end-to-end flow tests with fakes**
+- [x] **Step 1: Write end-to-end flow tests with fakes**
 
 Assert default recommended source set, selectable valid alternatives, configuration/version selection, individual companion items, explicit UNKNOWN warning, explicit INCOMPATIBLE override, complete two-file preview, Apply disabled on conflicts, successful paths notification, sync suggestion, and stale-preview recovery.
 
-- [ ] **Step 2: Implement confirmation state**
+- [x] **Step 2: Implement confirmation state**
 
 Populate source-set choices from compatibility results, not free text. Require a checkbox for UNKNOWN and the phrase `Add despite known incompatibility` for INCOMPATIBLE. Required recipe items cannot be deselected; recommended items can.
 
-- [ ] **Step 3: Implement native diff preview**
+- [x] **Step 3: Implement native diff preview**
 
-Create one diff chain per changed file using IntelliJ diff content factories. Label originals and proposed content, display planner warnings above the diff, and expose Apply only when preview validation succeeds.
+Create one native diff request per changed file using IntelliJ diff content factories and display them as tabs in one review dialog. Label originals and proposed content, display planner warnings above the diff, and expose Apply only when preview validation succeeds.
 
-- [ ] **Step 4: Wire Apply and Undo behavior**
+- [x] **Step 4: Wire Apply and Undo behavior**
 
 Call the applicator once, show one success notification listing relative paths, and offer the IDE's Gradle refresh action as a link without invoking it. On stale preview, return to confirmation and regenerate from a fresh project snapshot.
 
-- [ ] **Step 5: Map actionable diagnostics**
+- [x] **Step 5: Map actionable diagnostics**
 
 Define stable error codes for unsupported project, ambiguous source sets, catalog conflict, version conflict, read-only file, invalid proposed syntax, stale preview, provider unavailable, cache corrupt, and unexpected failure. User messages omit stack traces; IDE logs include the code and exception but never file content.
 
-- [ ] **Step 6: Run the complete test suite**
+- [x] **Step 6: Run the complete test suite**
 
 Run: `./gradlew test`
 
