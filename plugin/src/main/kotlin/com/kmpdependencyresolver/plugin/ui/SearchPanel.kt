@@ -18,6 +18,7 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import com.kmpdependencyresolver.core.model.TargetFamily
 import com.kmpdependencyresolver.plugin.DependencyResolverService
+import com.kmpdependencyresolver.plugin.settings.ResolverSettings
 import java.awt.BorderLayout
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
@@ -55,6 +56,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         target.accessibleContext.accessibleName = "Required target"
         results.accessibleContext.accessibleName = "Dependency results"
         results.cellRenderer = ResultCellRenderer()
+        previews.isSelected = ApplicationManager.getApplication().service<ResolverSettings>().state.includePreReleases
 
         val snapshot = runCatching(service::projectSnapshot).getOrNull()
         snapshot?.modules?.forEach { module.addItem(it.id) }
@@ -111,9 +113,10 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     private fun render(state: SearchUiState) {
         listModel.clear()
         state.results.forEach(listModel::addElement)
+        val messages = state.providerMessages + listOfNotNull(service.recipeStatus())
         status.text = when {
             state.searching -> "Searching…"
-            state.providerMessages.isNotEmpty() -> "${state.results.size} results · ${state.providerMessages.joinToString()}"
+            messages.isNotEmpty() -> "${state.results.size} results · ${messages.joinToString()}"
             else -> "${state.results.size} results"
         }
     }

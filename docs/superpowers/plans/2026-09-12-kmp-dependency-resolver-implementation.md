@@ -765,23 +765,23 @@ git commit -m "feat: confirm preview and apply dependency recipes"
 **Interfaces:**
 - Produces: persisted provider enablement, fixed endpoint display, offline mode, cache clear action, and `RemoteRecipeUpdater.update(manifestUri)`.
 
-- [ ] **Step 1: Write settings and updater tests**
+- [x] **Step 1: Write settings and updater tests**
 
 Assert defaults enable klibs/Central/Google and remote recipes; offline mode performs no HTTP calls; disabling a provider removes it from the coordinator; cache clear removes only the plugin cache; remote updates require HTTPS, schema match, declared byte length, and SHA-256 match; invalid updates preserve the bundled/last-good catalog.
 
-- [ ] **Step 2: Implement persistent settings**
+- [x] **Step 2: Implement persistent settings**
 
 Use `PersistentStateComponent<ResolverSettings.State>`. Display endpoint hostnames as read-only values; expose provider toggles, offline mode, preview-release preference, remote recipe toggle, and Clear Cache. Do not accept arbitrary endpoint URLs in the MVP.
 
-- [ ] **Step 3: Implement signed-by-manifest catalog integrity**
+- [x] **Step 3: Implement signed-by-manifest catalog integrity**
 
 The bundled manifest contains schema version, a catalog URL restricted to `https://github.com/itsSiddharthGupta/KmpDependencyResolver/releases/download/`, maximum byte length, and SHA-256 digest. Fetch the manifest only from `https://raw.githubusercontent.com/itsSiddharthGupta/KmpDependencyResolver/main/registry/manifest.json`, validate it against a bundled Ed25519 public-key signature, then fetch and hash the catalog before atomic cache replacement. On any failure, retain the last valid catalog and report `CURATED_CATALOG_STALE` nonblockingly. Commit the human-readable `registry/catalog-v1.json`; release CI signs it and uploads the immutable asset referenced by the manifest.
 
-- [ ] **Step 4: Write privacy documentation**
+- [x] **Step 4: Write privacy documentation**
 
 Document the exact hosts `api.klibs.io`, `search.maven.org`, `repo1.maven.org`, `dl.google.com`, `plugins.gradle.org`, `raw.githubusercontent.com`, and `github.com`. State that queries/filters go only to enabled search providers; project names, source code, files, and installed dependency lists are not transmitted; all caches are local and removable.
 
-- [ ] **Step 5: Register Settings and run tests**
+- [x] **Step 5: Register Settings and run tests**
 
 Run: `./gradlew test`
 

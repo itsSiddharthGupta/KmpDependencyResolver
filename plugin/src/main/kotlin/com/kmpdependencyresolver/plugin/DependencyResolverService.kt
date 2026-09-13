@@ -3,6 +3,7 @@ package com.kmpdependencyresolver.plugin
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.module.ModuleUtilCore
 import com.intellij.openapi.project.Project
@@ -26,6 +27,7 @@ import com.kmpdependencyresolver.plugin.editing.ChangePreviewService
 import com.kmpdependencyresolver.plugin.editing.PsiChangeApplicator
 import com.kmpdependencyresolver.plugin.project.JetBrainsProjectModelReader
 import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
+import com.kmpdependencyresolver.plugin.settings.ResolverSettings
 import com.kmpdependencyresolver.plugin.ui.AddDependencyBackend
 import com.kmpdependencyresolver.providers.AggregatedSearchResult
 import com.kmpdependencyresolver.providers.ProviderSearchCoordinator
@@ -36,32 +38,60 @@ import com.kmpdependencyresolver.providers.klibs.StreamableHttpMcpClient
 import com.kmpdependencyresolver.providers.maven.GoogleMavenProvider
 import com.kmpdependencyresolver.providers.maven.MavenCentralProvider
 import com.kmpdependencyresolver.providers.recipe.JsonRecipeRegistry
+import com.kmpdependencyresolver.providers.recipe.RemoteRecipeUpdater
 import java.nio.file.Path
+import java.util.Base64
+import java.util.concurrent.Executors
 
 @Service(Service.Level.PROJECT)
 class DependencyResolverService(private val project: Project) : Disposable, AddDependencyBackend {
     private val transport = JdkHttpTransport()
     private val cache = FileSearchCache(Path.of(PathManager.getSystemPath(), "kmp-dependency-resolver", "cache"))
-    private val coordinator = ProviderSearchCoordinator(
-        listOf(
-            KlibsProvider(StreamableHttpMcpClient(transport), cache),
-            MavenCentralProvider(transport, cache),
-            GoogleMavenProvider(transport, cache),
-        ),
-    )
+    private val settings = service<ResolverSettings>()
+    private var providerIds = settings.enabledProviderIds()
+    private var coordinator = createCoordinator(providerIds)
     private val modelReader = JetBrainsProjectModelReader()
     private val planner = ChangePlanner()
-    private val recipeRegistry by lazy {
-        val bytes = checkNotNull(javaClass.getResourceAsStream("/recipes/bundled-recipes.json")) {
+    private val bundledRecipeBytes by lazy {
+        checkNotNull(javaClass.getResourceAsStream("/recipes/bundled-recipes.json")) {
             "Bundled recipes are unavailable"
         }.use { it.readBytes() }
-        JsonRecipeRegistry.fromBytes(bytes)
+    }
+    @Volatile private var recipeRegistry: JsonRecipeRegistry? = null
+    @Volatile private var recipeUpdateCode: String? = null
+    private val recipeUpdaterExecutor = Executors.newSingleThreadExecutor()
+
+    init {
+        if (settings.state.remoteRecipesEnabled) {
+            recipeUpdaterExecutor.submit {
+                val updater = RemoteRecipeUpdater(
+                    transport,
+                    Path.of(PathManager.getSystemPath(), "kmp-dependency-resolver", "cache", "recipes"),
+                    Base64.getDecoder().decode(RemoteRecipeUpdater.BUNDLED_PUBLIC_KEY_BASE64),
+                    bundledRecipeBytes,
+                )
+                val result = updater.update(RemoteRecipeUpdater.MANIFEST_URI, settings.state.offlineMode)
+                recipeRegistry = result.catalog
+                recipeUpdateCode = result.code
+            }
+        }
     }
 
-    fun search(request: SearchRequest): AggregatedSearchResult = coordinator.search(request)
+    @Synchronized
+    fun search(request: SearchRequest): AggregatedSearchResult {
+        val enabled = settings.enabledProviderIds()
+        if (enabled != providerIds) {
+            coordinator.close()
+            providerIds = enabled
+            coordinator = createCoordinator(enabled)
+        }
+        return coordinator.search(request)
+    }
     fun projectSnapshot(): ProjectSnapshot = modelReader.read(project)
     override fun snapshot(): ProjectSnapshot = projectSnapshot()
-    override fun recipes(candidate: Candidate): List<DependencyRecipe> = recipeRegistry.find(candidate.coordinates)
+    override fun recipes(candidate: Candidate): List<DependencyRecipe> =
+        (recipeRegistry ?: JsonRecipeRegistry.fromBytes(bundledRecipeBytes)).find(candidate.coordinates)
+    fun recipeStatus(): String? = recipeUpdateCode
     override fun plan(selection: DependencySelection, project: ChangeProjectSnapshot): PlanResult = planner.plan(selection, project)
     override fun preview(plan: ChangePlan, snapshot: ProjectSnapshot): ChangePreview = ChangePreviewService(project).preview(plan, snapshot)
     override fun apply(preview: ChangePreview): ApplyResult = PsiChangeApplicator(project).apply(preview)
@@ -82,7 +112,19 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             ?: snapshot.modules.firstOrNull()?.id
     }
 
-    override fun dispose() = coordinator.close()
+    @Synchronized
+    override fun dispose() {
+        coordinator.close()
+        recipeUpdaterExecutor.shutdownNow()
+    }
+
+    private fun createCoordinator(enabled: List<String>) = ProviderSearchCoordinator(
+        buildList {
+            if ("klibs" in enabled) add(KlibsProvider(StreamableHttpMcpClient(transport), cache))
+            if ("maven-central" in enabled) add(MavenCentralProvider(transport, cache))
+            if ("google-maven" in enabled) add(GoogleMavenProvider(transport, cache))
+        },
+    )
 
     private fun parseCatalog(text: String): CatalogState {
         fun section(name: String) = text.substringAfter("[$name]", "").substringBefore("\n[")

@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "catalogUrl": "https://github.com/itsSiddharthGupta/KmpDependencyResolver/releases/download/v0.1.0/catalog-v1.json",
+  "byteLength": 2140,
+  "maxBytes": 1048576,
+  "sha256": "abfa0fa133656c22a55dd2e38ad1633dc76b27c185f0c2860352ba2681062dd2",
+  "signature": "jRPJganAX/uk+/EVFfAzq/crOeHznvyg2T3FSjbp7YHtQlss9jAbJez2lNQ3JfVEc1T6ZuFjd23Ie8LbewTyDQ=="
+}

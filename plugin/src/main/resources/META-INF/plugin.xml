@@ -10,6 +10,9 @@
   <depends>org.jetbrains.kotlin</depends>
   <depends optional="true" config-file="toml-support.xml">org.toml.lang</depends>
   <extensions defaultExtensionNs="com.intellij">
+    <applicationConfigurable parentId="tools"
+                             displayName="KMP Dependency Resolver"
+                             instance="com.kmpdependencyresolver.plugin.settings.ResolverConfigurable"/>
     <toolWindow id="KMP Dependencies"
                 anchor="right"
                 factoryClass="com.kmpdependencyresolver.plugin.ui.DependencyToolWindowFactory"/>
