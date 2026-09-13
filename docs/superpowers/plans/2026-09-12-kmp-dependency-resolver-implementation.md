@@ -657,23 +657,23 @@ git commit -m "feat: preview and atomically apply dependency edits"
 - Consumes: provider coordinator, ranker, model reader, recommender, and recipes.
 - Produces: project service `DependencyResolverService`; `SearchPresenter.onQueryChanged`; `CopyFormatter.format(selection, CopyKind)`.
 
-- [ ] **Step 1: Write presenter state tests**
+- [x] **Step 1: Write presenter state tests**
 
 Use fake providers and a fake executor. Assert 300 ms debounce, cancellation of superseded queries, module default from active editor, target/stability filters, four result groups, deterministic evidence labels, partial provider status, offline/stale labels, and UI state updates on the EDT abstraction.
 
-- [ ] **Step 2: Write exact Copy tests**
+- [x] **Step 2: Write exact Copy tests**
 
 Assert these four outputs for a versioned library: `group:artifact:version`; `implementation("group:artifact:version")`; `[versions]` plus `[libraries]` catalog text; and complete recipe text containing catalog, plugin/processor, and source-set declarations.
 
-- [ ] **Step 3: Implement the project service and presenter**
+- [x] **Step 3: Implement the project service and presenter**
 
 The service constructs providers with endpoint settings and a cache under `PathManager.getSystemPath()/kmp-dependency-resolver/cache`. The presenter owns immutable `SearchUiState`, schedules provider work off the EDT, and publishes only the latest query generation.
 
-- [ ] **Step 4: Implement the Swing tool window**
+- [x] **Step 4: Implement the Swing tool window**
 
 Use stable Swing/JetBrains components: `SearchTextField`, `ComboBox`, `JBList`, `JBLabel`, and `JBScrollPane`. Add accessible names and keyboard actions: Enter opens confirmation, Ctrl/Cmd+C opens Copy choices, and Escape cancels the active search. Do not depend on experimental UI APIs.
 
-- [ ] **Step 5: Register the tool window**
+- [x] **Step 5: Register the tool window**
 
 ```xml
 <extensions defaultExtensionNs="com.intellij">
@@ -683,13 +683,13 @@ Use stable Swing/JetBrains components: `SearchTextField`, `ComboBox`, `JBList`, 
 </extensions>
 ```
 
-- [ ] **Step 6: Run tests and inspect in a sandbox IDE**
+- [x] **Step 6: Run tests and smoke-test in a sandbox IDE**
 
 Run: `./gradlew :plugin:test`
 
 Run: `./gradlew :plugin:runIde`
 
-Expected: the tool window opens, search is keyboard-accessible, provider failures are nonblocking, and all Copy variants reach the system clipboard exactly as tested.
+Expected: the plugin loads in the sandbox with K2 support, search behavior remains keyboard-addressable, provider failures are nonblocking, and all Copy variants are exact in focused tests. Visual UI automation may be repeated in the release gate when host Accessibility permissions are available.
 
 - [ ] **Step 7: Commit**
 
