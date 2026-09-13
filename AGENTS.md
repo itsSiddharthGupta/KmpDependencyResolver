@@ -11,10 +11,11 @@ The public repository is `https://github.com/itsSiddharthGupta/KmpDependencyReso
 - Tasks 1–14 in `docs/superpowers/plans/2026-09-12-kmp-dependency-resolver-implementation.md` are implemented except for the complete interactive IDE smoke matrix.
 - `main` tracks `origin/main`. The Marketplace release-gate commit is `be53532`; result readability and official-publisher grouping were added in `89a7feb`.
 - GitHub Actions run `34762961656` passed clean tests, packaging, project-configuration verification, and Plugin Verifier against all five pinned IDE distributions. It uploaded verification reports and an unsigned plugin ZIP.
-- IntelliJ IDEA 2025.2.5 sandbox startup and K2 plugin loading passed. The user confirmed search, Add, and all four Copy actions work. Undo, offline behavior, the revised result cards, and the remaining IDE matrix still need manual confirmation because automation cannot attach to the Gradle-launched macOS sandbox process.
+- IntelliJ IDEA 2025.2.5 sandbox startup and K2 plugin loading passed. The user confirmed search, the revised result cards and official/community ordering, Add, and all four Copy actions work. One-step Undo, offline behavior, and the remaining IDE matrix still need manual confirmation because automation cannot attach to the Gradle-launched macOS sandbox process.
 - Search results now show artifact/version, coordinates, compatibility/evidence, targets/providers, and a wrapped description. A conservative, boundary-safe publisher catalog places known official groups such as `io.ktor` above community results.
 - The hierarchical smoke fixture now configures as a real Gradle project: its Android module declares namespace/compile SDK and its custom iOS hierarchy resolves `commonMain` correctly.
 - Sandbox logs currently report a JetBrains `SlowOperations` warning because Add reads the project model from the EDT. Add succeeds, but move that snapshot work off the EDT before Marketplace release.
+- Broader UI improvements are deliberately deferred until after the release-critical smoke matrix and EDT warning are resolved. Preserve them as follow-up work rather than expanding the `0.1.0` gate.
 - The working tree was clean after the initial repository push.
 
 ## Architecture
