@@ -1,8 +1,13 @@
 <idea-plugin>
   <id>com.kmpdependencyresolver</id>
   <name>KMP Dependency Resolver</name>
-  <vendor>itsSiddharthGupta</vendor>
-  <description>Discover and safely add Kotlin Multiplatform dependencies.</description>
+  <vendor url="https://github.com/itsSiddharthGupta">itsSiddharthGupta</vendor>
+  <description><![CDATA[
+    Discover KMP, Compose Multiplatform, and platform-specific dependencies; copy declarations or safely preview and apply Kotlin DSL plus version-catalog changes.
+  ]]></description>
+  <change-notes><![CDATA[
+    <p>Initial 0.1.0 release with multi-provider search, target evidence, four Copy formats, and atomic Add with native diff preview.</p>
+  ]]></change-notes>
   <idea-version since-build="252" until-build="262.*"/>
   <depends>com.intellij.modules.platform</depends>
   <depends>com.intellij.modules.java</depends>

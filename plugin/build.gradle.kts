@@ -1,4 +1,6 @@
+import org.gradle.api.tasks.bundling.AbstractArchiveTask
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -29,6 +31,8 @@ dependencies {
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("org.toml.lang")
         testFramework(TestFrameworkType.Platform)
+        pluginVerifier()
+        zipSigner()
     }
 }
 
@@ -43,6 +47,26 @@ intellijPlatform {
     }
 
     buildSearchableOptions = false
+
+    pluginVerification {
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.5")
+            create(IntelliJPlatformType.IntellijIdea, "2026.1.3")
+            create(IntelliJPlatformType.IntellijIdea, "2026.2.0.1")
+            create(IntelliJPlatformType.AndroidStudio, "2025.2.3.9")
+            create(IntelliJPlatformType.AndroidStudio, "2025.3.1.6")
+        }
+    }
+
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
+
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+    }
 }
 
 tasks.buildPlugin {
@@ -51,4 +75,9 @@ tasks.buildPlugin {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.withType<AbstractArchiveTask>().configureEach {
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
 }

@@ -691,7 +691,7 @@ Run: `./gradlew :plugin:runIde`
 
 Expected: the plugin loads in the sandbox with K2 support, search behavior remains keyboard-addressable, provider failures are nonblocking, and all Copy variants are exact in focused tests. Visual UI automation may be repeated in the release gate when host Accessibility permissions are available.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add plugin/src
@@ -740,7 +740,7 @@ Run: `./gradlew test`
 
 Expected: all end-to-end fake flows and prior tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add plugin/src
@@ -787,7 +787,7 @@ Run: `./gradlew test`
 
 Expected: offline tests observe zero network calls, invalid catalogs never replace valid data, and settings persist across service recreation.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add providers/src plugin/src docs/network-and-privacy.md registry
@@ -812,19 +812,19 @@ git commit -m "feat: add provider privacy and recipe update controls"
 - Consumes: the complete plugin.
 - Produces: reproducible distribution, compatibility report, Marketplace text, and manual smoke-test record.
 
-- [ ] **Step 1: Configure verification and reproducible packaging**
+- [x] **Step 1: Configure verification and reproducible packaging**
 
-Set `sinceBuild=252`, `untilBuild=262.*`, version `0.1.0`, and Plugin Verifier IDEs IC 2025.2.5, IC 2026.1.3, IC 2026.2.0.1, AI 2025.2.3.9, and AI 2025.3.1.6. Configure `buildPlugin`, `verifyPlugin`, `verifyPluginProjectConfiguration`, and `signPlugin`; signing and publishing read only `CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD`, and `PUBLISH_TOKEN` environment secrets.
+Set `sinceBuild=252`, `untilBuild=262.*`, version `0.1.0`, and Plugin Verifier IDEs IC 2025.2.5, unified IntelliJ IDEA 2026.1.3 and 2026.2.0.1 (Community artifacts were retired after 2025.2), plus AI 2025.2.3.9 and AI 2025.3.1.6. Configure `buildPlugin`, `verifyPlugin`, `verifyPluginProjectConfiguration`, and `signPlugin`; signing and publishing read only `CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD`, and `PUBLISH_TOKEN` environment secrets.
 
-- [ ] **Step 2: Create CI gates**
+- [x] **Step 2: Create CI gates**
 
 On pull requests and pushes, run `./gradlew clean test verifyPluginProjectConfiguration buildPlugin verifyPlugin`. Upload test reports, verifier reports, and the unsigned distribution. Add a separate manual `workflow_dispatch` release job that requires all gates, signs, and publishes; ordinary CI cannot publish.
 
-- [ ] **Step 3: Write user and Marketplace documentation**
+- [x] **Step 3: Write user and Marketplace documentation**
 
 README sections: supported IDE/project formats, install/run-from-source, search/evidence semantics, Add/Copy workflow, limitations, privacy link, development commands, and issue reporting. Marketplace text must say client-only, list external services, explain UNKNOWN/INCOMPATIBLE overrides, and avoid compatibility guarantees.
 
-- [ ] **Step 4: Run automated release gates**
+- [x] **Step 4: Run automated release gates**
 
 Run: `./gradlew clean test verifyPluginProjectConfiguration buildPlugin verifyPlugin`
 
@@ -834,7 +834,7 @@ Expected: all tests pass, no compatibility errors for the pinned IDEs, and the d
 
 For one pinned IntelliJ IDEA and both pinned Android Studio releases: install the ZIP, open the hierarchical KMP fixture, search `ktor`, copy all four formats, preview an Add to `commonMain`, apply, Undo once, confirm both files restore, disable networking, and confirm cached/bundled results remain usable. Record each result with IDE build number in the release notes.
 
-- [ ] **Step 6: Inspect the final diff and restricted APIs**
+- [x] **Step 6: Inspect the final diff and restricted APIs**
 
 Run: `git diff main...HEAD --check`
 
@@ -842,7 +842,7 @@ Run: `rg -n '(^|\.)impl\.|ApiStatus\.Internal|IntellijInternalApi|guaranteed com
 
 Expected: no whitespace errors, no restricted API references, and “guaranteed compatible” appears only when explicitly denying such a claim in documentation.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add .github README.md CHANGELOG.md docs plugin gradle.properties
@@ -853,8 +853,8 @@ git commit -m "chore: add Marketplace release verification"
 
 ## Final Acceptance Run
 
-- [ ] Run `./gradlew clean test verifyPluginProjectConfiguration buildPlugin verifyPlugin` from a clean checkout.
-- [ ] Confirm `git status --short` is empty.
-- [ ] Confirm every requirement in `docs/superpowers/specs/2026-09-12-kmp-dependency-resolver-design.md` maps to Tasks 1–14.
-- [ ] Confirm the distribution contains no signing keys, tokens, recorded live identifiers, project fixtures with personal paths, or network response data beyond sanitized contract fixtures.
+- [x] Run `./gradlew clean test verifyPluginProjectConfiguration buildPlugin verifyPlugin` from a clean checkout.
+- [x] Confirm `git status --short` is empty after the Task 14 commit.
+- [x] Confirm every requirement in `docs/superpowers/specs/2026-09-12-kmp-dependency-resolver-design.md` maps to Tasks 1–14.
+- [x] Confirm the distribution contains no signing keys, tokens, recorded live identifiers, project fixtures with personal paths, or network response data beyond sanitized contract fixtures.
 - [ ] Confirm the manual IntelliJ IDEA and Android Studio smoke matrix is recorded for version `0.1.0`.
