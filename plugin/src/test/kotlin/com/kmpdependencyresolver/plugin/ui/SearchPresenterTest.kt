@@ -65,8 +65,45 @@ class SearchPresenterTest {
         assertThat(additions).containsExactly(result to ":shared")
     }
 
-    private fun candidate(name: String, evidence: EvidenceKind, targets: Set<TargetFamily>) = Candidate(
-        Coordinates("sample", name), name, listOf(DependencyVersion("1.0", true)), targets, evidence,
+    @Test
+    fun `official publisher results form the first section without hiding compatibility`() {
+        val tasks = ManualTasks()
+        val states = mutableListOf<SearchUiState>()
+        val official = candidate("ktor-client-core", EvidenceKind.VERIFIED, setOf(TargetFamily.JVM), "io.ktor")
+        val community = candidate("ktorfit-lib", EvidenceKind.VERIFIED, setOf(TargetFamily.JVM), "de.jensklingenberg.ktorfit")
+        val presenter = SearchPresenter(
+            DependencySearchGateway { AggregatedSearchResult(listOf(community, official), emptyList()) },
+            tasks, tasks, tasks, { ":shared" }, states::add,
+        )
+
+        presenter.onQueryChanged("ktor", setOf(TargetFamily.JVM), false)
+        tasks.runLatest(); tasks.runLatest(); tasks.runLatest()
+
+        val state = states.last()
+        assertThat(state.results.map { it.candidate.coordinates.notation })
+            .containsExactly("io.ktor:ktor-client-core", "de.jensklingenberg.ktorfit:ktorfit-lib")
+        assertThat(state.sections[PublisherSection.OFFICIAL]).containsExactly(state.results.first())
+        assertThat(state.sections[PublisherSection.COMMUNITY]).containsExactly(state.results.last())
+        assertThat(state.results.first().publisherName).isEqualTo("Ktor")
+        assertThat(state.results.first().group).isEqualTo(ResultGroup.RECOMMENDED)
+    }
+
+    @Test
+    fun `official publisher matching does not accept a group prefix lookalike`() {
+        val catalog = OfficialPublisherCatalog()
+
+        assertThat(catalog.publisherFor("io.ktor")).isEqualTo("Ktor")
+        assertThat(catalog.publisherFor("io.ktor.client")).isEqualTo("Ktor")
+        assertThat(catalog.publisherFor("io.ktormalicious")).isNull()
+    }
+
+    private fun candidate(
+        name: String,
+        evidence: EvidenceKind,
+        targets: Set<TargetFamily>,
+        group: String = "sample",
+    ) = Candidate(
+        Coordinates(group, name), name, listOf(DependencyVersion("1.0", true)), targets, evidence,
         setOf(Provenance("fixture")),
     )
 }

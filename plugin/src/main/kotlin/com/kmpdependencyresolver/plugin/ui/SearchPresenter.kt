@@ -12,12 +12,18 @@ fun interface TaskScheduler { fun schedule(delayMillis: Long, task: () -> Unit):
 fun interface UiDispatcher { fun dispatch(task: () -> Unit) }
 
 enum class ResultGroup { RECOMMENDED, COMPATIBLE, UNKNOWN, INCOMPATIBLE }
+enum class PublisherSection(val displayName: String) {
+    OFFICIAL("Official libraries"),
+    COMMUNITY("Community libraries"),
+}
 
 data class SearchResultItem(
     val candidate: Candidate,
     val group: ResultGroup,
     val evidenceLabel: String,
     val freshnessLabel: String?,
+    val section: PublisherSection,
+    val publisherName: String?,
 )
 
 data class SearchUiState(
@@ -26,6 +32,7 @@ data class SearchUiState(
     val searching: Boolean = false,
     val results: List<SearchResultItem> = emptyList(),
     val groups: Map<ResultGroup, List<SearchResultItem>> = ResultGroup.entries.associateWith { emptyList() },
+    val sections: Map<PublisherSection, List<SearchResultItem>> = PublisherSection.entries.associateWith { emptyList() },
     val providerMessages: List<String> = emptyList(),
 )
 
@@ -37,6 +44,7 @@ class SearchPresenter(
     private val activeModule: () -> String?,
     private val onState: (SearchUiState) -> Unit,
     private val onAdd: (Candidate, String?) -> Unit = { _, _ -> },
+    private val officialPublishers: OfficialPublisherCatalog = OfficialPublisherCatalog(),
 ) {
     private var generation = 0L
     private var pendingDebounce: Cancellable? = null
@@ -53,7 +61,7 @@ class SearchPresenter(
         pendingDebounce?.cancel()
         pendingSearch?.cancel()
         val selectedModule = moduleId ?: activeModule()
-        publish(SearchUiState(query, selectedModule, searching = query.isNotBlank()))
+        publish(SearchUiState(query = query, moduleId = selectedModule, searching = query.isNotBlank()))
         if (query.isBlank()) return
         pendingDebounce = debounceScheduler.schedule(300) {
             pendingSearch = worker.schedule(0) {
@@ -61,12 +69,16 @@ class SearchPresenter(
                 ui.dispatch {
                     if (generation != currentGeneration) return@dispatch
                     val items = result.candidates.map { candidate -> item(candidate, requiredTargets) }
-                        .sortedWith(compareBy({ it.group.ordinal }, { it.candidate.coordinates.notation }))
+                        .sortedWith(compareBy({ it.section.ordinal }, { it.group.ordinal }, { it.candidate.coordinates.notation }))
                     publish(
                         SearchUiState(
-                            query, selectedModule, false, items,
-                            ResultGroup.entries.associateWith { group -> items.filter { it.group == group } },
-                            result.failures.map { "${it.providerId}: ${it.message}" }.sorted(),
+                            query = query,
+                            moduleId = selectedModule,
+                            searching = false,
+                            results = items,
+                            groups = ResultGroup.entries.associateWith { group -> items.filter { it.group == group } },
+                            sections = PublisherSection.entries.associateWith { section -> items.filter { it.section == section } },
+                            providerMessages = result.failures.map { "${it.providerId}: ${it.message}" }.sorted(),
                         ),
                     )
                 }
@@ -104,6 +116,8 @@ class SearchPresenter(
             "cache" in details -> "Cached"
             else -> null
         }
-        return SearchResultItem(candidate, group, evidence, freshness)
+        val publisher = officialPublishers.publisherFor(candidate.coordinates.group)
+        val section = if (publisher == null) PublisherSection.COMMUNITY else PublisherSection.OFFICIAL
+        return SearchResultItem(candidate, group, evidence, freshness, section, publisher)
     }
 }
