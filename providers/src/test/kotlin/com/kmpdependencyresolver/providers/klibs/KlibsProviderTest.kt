@@ -6,6 +6,7 @@ import com.kmpdependencyresolver.providers.cache.CacheEntry
 import com.kmpdependencyresolver.providers.cache.CachedPayload
 import com.kmpdependencyresolver.providers.cache.SearchCache
 import com.kmpdependencyresolver.providers.cache.SearchCacheKey
+import com.kmpdependencyresolver.providers.ProviderMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -55,6 +56,22 @@ class KlibsProviderTest {
             .containsExactly("1.9.0", "2.0.0-RC1")
     }
 
+    @Test
+    fun `cache only mode returns stale results without MCP calls`() {
+        val cachedSearch = resource("search-projects.json")
+        val client = FixtureMcpClient(cachedSearch)
+        val cache = KlibsFixedCache(CachedPayload(cachedSearch.toString().encodeToByteArray(), 100, stale = true))
+        val provider = KlibsProvider(client, cache, clock = { 1_000 }, mode = ProviderMode.CACHE_ONLY)
+
+        val result = provider.search(SearchRequest("serialization", emptySet(), includePreRelease = false))
+
+        assertThat(result.candidates).isNotEmpty()
+        assertThat(result.fromCache).isTrue()
+        assertThat(result.candidates.first().provenance.single().detail).contains("Stale cache")
+        assertThat(client.toolsListed).isFalse()
+        assertThat(client.calledTools).isEmpty()
+    }
+
     private fun resource(name: String): JsonObject {
         val envelope = checkNotNull(javaClass.getResourceAsStream("/klibs/$name")).use { it.readAllBytes().decodeToString() }
         val root = Json.parseToJsonElement(envelope).jsonObject
@@ -83,4 +100,9 @@ private class KlibsRecordingCache : SearchCache {
     var lastPut: CacheEntry? = null
     override fun get(key: SearchCacheKey, nowMillis: Long): CachedPayload? = null
     override fun put(entry: CacheEntry) { lastPut = entry }
+}
+
+private class KlibsFixedCache(private val payload: CachedPayload) : SearchCache {
+    override fun get(key: SearchCacheKey, nowMillis: Long): CachedPayload = payload
+    override fun put(entry: CacheEntry) = error("Cache-only search must not write")
 }

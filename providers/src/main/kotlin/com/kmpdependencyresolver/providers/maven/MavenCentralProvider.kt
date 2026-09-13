@@ -14,6 +14,7 @@ import com.kmpdependencyresolver.providers.cache.SearchCache
 import com.kmpdependencyresolver.providers.cache.SearchCacheKey
 import com.kmpdependencyresolver.providers.http.HttpRequestSpec
 import com.kmpdependencyresolver.providers.http.HttpTransport
+import com.kmpdependencyresolver.providers.ProviderMode
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -25,17 +26,21 @@ class MavenCentralProvider(
     private val cache: SearchCache,
     private val evidenceReader: PublicationEvidenceReader = RepositoryPublicationEvidenceReader(transport, CENTRAL_REPOSITORY),
     private val clock: () -> Long = System::currentTimeMillis,
+    private val mode: ProviderMode = ProviderMode.ONLINE,
 ) : SearchProvider {
     override fun search(request: SearchRequest): ProviderResult {
         val now = clock()
         return runCatching {
             val key = SearchCacheKey(ID, request.query, request.requiredTargets.map { it.name }.toSet(), request.includePreRelease)
-            val cached = cache.get(key, now)?.takeUnless { it.stale }
-            val payload = cached?.payload ?: fetch(request.query).also {
+            val cached = cache.get(key, now)?.takeIf { mode == ProviderMode.CACHE_ONLY || !it.stale }
+            val payload = cached?.payload ?: if (mode == ProviderMode.CACHE_ONLY) {
+                error("No cached Maven Central results for '${request.query}'")
+            } else fetch(request.query).also {
                 cache.put(CacheEntry(key, it, now, SEARCH_TTL_MILLIS))
             }
             val docs = json.decodeFromString<CentralResponse>(payload.decodeToString()).response.docs
-            val candidates = docs.mapNotNull { doc -> candidate(doc, request.includePreRelease) }
+            val cacheDetail = cached?.let { if (it.stale) "Stale cache" else "Cached" }
+            val candidates = docs.mapNotNull { doc -> candidate(doc, request.includePreRelease, cacheDetail) }
             ProviderResult(ID, candidates, retrievedAtEpochMillis = cached?.retrievedAtMillis ?: now, fromCache = cached != null)
         }.getOrElse { exception ->
             ProviderResult(ID, emptyList(), ProviderFailure(ID, exception.message ?: "Central search failed"), now, false)
@@ -52,15 +57,20 @@ class MavenCentralProvider(
         ).body
     }
 
-    private fun candidate(doc: CentralDoc, includePreRelease: Boolean): Candidate? {
+    private fun candidate(doc: CentralDoc, includePreRelease: Boolean, cacheDetail: String?): Candidate? {
         val stable = isStableVersion(doc.latestVersion)
         if (!stable && !includePreRelease) return null
         val requested = Coordinates(doc.g, doc.a)
-        val publication = runCatching { evidenceReader.read(requested, doc.latestVersion) }
-            .getOrElse { PublicationEvidence(requested, emptySet(), EvidenceKind.UNKNOWN, detail = it.message) }
+        val publication = if (mode == ProviderMode.CACHE_ONLY) {
+            PublicationEvidence(requested, emptySet(), EvidenceKind.UNKNOWN)
+        } else {
+            runCatching { evidenceReader.read(requested, doc.latestVersion) }
+                .getOrElse { PublicationEvidence(requested, emptySet(), EvidenceKind.UNKNOWN, detail = it.message) }
+        }
         val canonical = publication.canonicalCoordinates ?: requested
         val detail = buildString {
             append("Central search")
+            cacheDetail?.let { append("; $it") }
             if (publication.rawTargetNames.isNotEmpty()) append("; targets=${publication.rawTargetNames.sorted().joinToString(",")}")
             publication.detail?.let { append("; $it") }
         }

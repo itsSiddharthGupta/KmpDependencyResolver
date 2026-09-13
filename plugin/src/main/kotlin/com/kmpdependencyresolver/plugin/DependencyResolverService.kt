@@ -31,6 +31,7 @@ import com.kmpdependencyresolver.plugin.settings.ResolverSettings
 import com.kmpdependencyresolver.plugin.ui.AddDependencyBackend
 import com.kmpdependencyresolver.providers.AggregatedSearchResult
 import com.kmpdependencyresolver.providers.ProviderSearchCoordinator
+import com.kmpdependencyresolver.providers.ProviderMode
 import com.kmpdependencyresolver.providers.cache.FileSearchCache
 import com.kmpdependencyresolver.providers.http.JdkHttpTransport
 import com.kmpdependencyresolver.providers.klibs.KlibsProvider
@@ -48,8 +49,8 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
     private val transport = JdkHttpTransport()
     private val cache = FileSearchCache(Path.of(PathManager.getSystemPath(), "kmp-dependency-resolver", "cache"))
     private val settings = service<ResolverSettings>()
-    private var providerIds = settings.enabledProviderIds()
-    private var coordinator = createCoordinator(providerIds)
+    private var providerConfiguration = currentProviderConfiguration()
+    private var coordinator = createCoordinator(providerConfiguration)
     private val modelReader = JetBrainsProjectModelReader()
     private val planner = ChangePlanner()
     private val bundledRecipeBytes by lazy {
@@ -79,11 +80,11 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
 
     @Synchronized
     fun search(request: SearchRequest): AggregatedSearchResult {
-        val enabled = settings.enabledProviderIds()
-        if (enabled != providerIds) {
+        val configuration = currentProviderConfiguration()
+        if (configuration != providerConfiguration) {
             coordinator.close()
-            providerIds = enabled
-            coordinator = createCoordinator(enabled)
+            providerConfiguration = configuration
+            coordinator = createCoordinator(configuration)
         }
         return coordinator.search(request)
     }
@@ -118,11 +119,16 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
         recipeUpdaterExecutor.shutdownNow()
     }
 
-    private fun createCoordinator(enabled: List<String>) = ProviderSearchCoordinator(
+    private fun currentProviderConfiguration() = ProviderConfiguration(
+        settings.enabledProviderIds(),
+        if (settings.state.offlineMode) ProviderMode.CACHE_ONLY else ProviderMode.ONLINE,
+    )
+
+    private fun createCoordinator(configuration: ProviderConfiguration) = ProviderSearchCoordinator(
         buildList {
-            if ("klibs" in enabled) add(KlibsProvider(StreamableHttpMcpClient(transport), cache))
-            if ("maven-central" in enabled) add(MavenCentralProvider(transport, cache))
-            if ("google-maven" in enabled) add(GoogleMavenProvider(transport, cache))
+            if ("klibs" in configuration.ids) add(KlibsProvider(StreamableHttpMcpClient(transport), cache, mode = configuration.mode))
+            if ("maven-central" in configuration.ids) add(MavenCentralProvider(transport, cache, mode = configuration.mode))
+            if ("google-maven" in configuration.ids) add(GoogleMavenProvider(transport, cache, mode = configuration.mode))
         },
     )
 
@@ -149,4 +155,6 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
         val TABLE_ENTRY = Regex("(?m)^([A-Za-z0-9_.-]+)\\s*=\\s*\\{([^}]*)}")
         fun stringField(name: String) = Regex("(?:^|[,\\s])${Regex.escape(name)}\\s*=\\s*\"([^\"]+)\"")
     }
+
+    private data class ProviderConfiguration(val ids: List<String>, val mode: ProviderMode)
 }

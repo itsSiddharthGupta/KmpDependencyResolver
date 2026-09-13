@@ -11,12 +11,12 @@ The public repository is `https://github.com/itsSiddharthGupta/KmpDependencyReso
 - Tasks 1–14 in `docs/superpowers/plans/2026-09-12-kmp-dependency-resolver-implementation.md` are implemented except for the complete interactive IDE smoke matrix.
 - `main` tracks `origin/main`. The Marketplace release-gate commit is `be53532`; result readability and official-publisher grouping were added in `89a7feb`.
 - GitHub Actions run `34762961656` passed clean tests, packaging, project-configuration verification, and Plugin Verifier against all five pinned IDE distributions. It uploaded verification reports and an unsigned plugin ZIP.
-- IntelliJ IDEA 2025.2.5 sandbox startup and K2 plugin loading passed. The user confirmed search, the revised result cards and official/community ordering, Add, and all four Copy actions work. One-step Undo, offline behavior, and the remaining IDE matrix still need manual confirmation because automation cannot attach to the Gradle-launched macOS sandbox process.
+- IntelliJ IDEA 2025.2.5 sandbox startup and K2 plugin loading passed. The user confirmed search, the revised result cards and official/community ordering, Add, all four Copy actions, and one-step Undo work. The first offline smoke exposed that offline mode removed providers before they could read their caches; cache-only provider execution is implemented and automated, but still needs an interactive retest. The remaining IDE matrix also needs manual confirmation because automation cannot attach to the Gradle-launched macOS sandbox process.
 - Search results now show artifact/version, coordinates, compatibility/evidence, targets/providers, and a wrapped description. A conservative, boundary-safe publisher catalog places known official groups such as `io.ktor` above community results.
 - The hierarchical smoke fixture now configures as a real Gradle project: its Android module declares namespace/compile SDK and its custom iOS hierarchy resolves `commonMain` correctly.
 - Sandbox logs currently report a JetBrains `SlowOperations` warning because Add reads the project model from the EDT. Add succeeds, but move that snapshot work off the EDT before Marketplace release.
 - Broader UI improvements are deliberately deferred until after the release-critical smoke matrix and EDT warning are resolved. Preserve them as follow-up work rather than expanding the `0.1.0` gate.
-- The working tree was clean after the initial repository push.
+- The working tree was clean after the initial repository push. Offline-mode cache fixes may be present locally until their focused manual retest is complete.
 
 ## Architecture
 
@@ -63,5 +63,5 @@ On one pinned IntelliJ IDEA build and both pinned Android Studio builds:
 2. Confirm the **KMP Dependencies** tool window opens and search for `ktor`.
 3. Verify all four Copy formats.
 4. Preview and apply an Add to `commonMain`; confirm both proposed file diffs, then use one native Undo and verify both files return byte-for-byte to their starting state.
-5. Enable offline mode and confirm cached or bundled results remain usable without provider requests.
+5. While online, search for an exact query such as `ktor`; then enable offline mode and repeat the same query with the same target/pre-release filters. Confirm cached results are labeled `Cached` or `Stale cache` and no provider requests occur. An uncached query should show provider-level “No cached … results” messages rather than silently searching the network.
 6. Record the exact IDE version/build and pass/fail evidence in `CHANGELOG.md`. A pending row is not a pass.

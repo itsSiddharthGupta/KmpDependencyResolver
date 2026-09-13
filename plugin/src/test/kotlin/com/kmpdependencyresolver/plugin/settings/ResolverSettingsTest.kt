@@ -18,7 +18,7 @@ class ResolverSettingsTest {
     }
 
     @Test
-    fun `loaded state controls coordinator provider ids and offline makes it empty`() {
+    fun `loaded state controls provider ids and offline preserves enabled providers for cached search`() {
         val settings = ResolverSettings()
         settings.loadState(ResolverSettings.State(googleMavenEnabled = false))
         assertThat(settings.enabledProviderIds()).containsExactly("klibs", "maven-central")
@@ -27,7 +27,7 @@ class ResolverSettingsTest {
         assertThat(recreated.state.googleMavenEnabled).isFalse()
 
         settings.state.offlineMode = true
-        assertThat(settings.enabledProviderIds()).isEmpty()
+        assertThat(settings.enabledProviderIds()).containsExactly("klibs", "maven-central")
     }
 
     @Test

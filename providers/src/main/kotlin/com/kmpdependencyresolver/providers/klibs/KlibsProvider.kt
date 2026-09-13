@@ -13,6 +13,7 @@ import com.kmpdependencyresolver.core.search.SearchRequest
 import com.kmpdependencyresolver.providers.cache.CacheEntry
 import com.kmpdependencyresolver.providers.cache.SearchCache
 import com.kmpdependencyresolver.providers.cache.SearchCacheKey
+import com.kmpdependencyresolver.providers.ProviderMode
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -27,14 +28,16 @@ class KlibsProvider(
     private val client: McpClient,
     private val cache: SearchCache,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val mode: ProviderMode = ProviderMode.ONLINE,
 ) : SearchProvider {
     override fun search(request: SearchRequest): ProviderResult {
         val now = clock()
         return runCatching {
             var advertisedTools: Set<String>? = null
             val key = SearchCacheKey(ID, request.query, request.requiredTargets.map { it.name }.toSet(), request.includePreRelease)
-            val cached = cache.get(key, now)?.takeUnless { it.stale }
+            val cached = cache.get(key, now)?.takeIf { mode == ProviderMode.CACHE_ONLY || !it.stale }
             val result = cached?.let { json.parseToJsonElement(it.payload.decodeToString()).jsonObject } ?: run {
+                if (mode == ProviderMode.CACHE_ONLY) error("No cached klibs.io results for '${request.query}'")
                 client.initialize()
                 advertisedTools = client.listTools()
                 if ("searchProjects" !in advertisedTools.orEmpty()) error("klibs MCP does not advertise searchProjects")
@@ -51,11 +54,11 @@ class KlibsProvider(
                     var latest = pkg["latestVersion"]?.let { if (it.toString() == "null") null else it.jsonPrimitive.content }
                     var stable = pkg["latestStableVersion"]?.let { if (it.toString() == "null") null else it.jsonPrimitive.content }
                     if (latest == null && stable == null) {
-                        if (advertisedTools == null) {
+                        if (mode == ProviderMode.ONLINE && advertisedTools == null) {
                             client.initialize()
                             advertisedTools = client.listTools()
                         }
-                        if ("getLatestVersion" in advertisedTools.orEmpty()) {
+                        if (mode == ProviderMode.ONLINE && "getLatestVersion" in advertisedTools.orEmpty()) {
                             val versionResult = client.callTool("getLatestVersion", buildJsonObject {
                                 put("groupId", coordinates.group); put("artifactId", coordinates.artifact)
                             })
@@ -76,7 +79,10 @@ class KlibsProvider(
                         versions,
                         families,
                         EvidenceKind.VERIFIED,
-                        setOf(Provenance(ID, "klibs.io indexed targets=${project.getValue("targets").jsonArray.joinToString { it.jsonPrimitive.content }}")),
+                        setOf(Provenance(ID, buildString {
+                            append("klibs.io indexed targets=${project.getValue("targets").jsonArray.joinToString { it.jsonPrimitive.content }}")
+                            cached?.let { append(if (it.stale) "; Stale cache" else "; Cached") }
+                        })),
                     )
                 }
             }

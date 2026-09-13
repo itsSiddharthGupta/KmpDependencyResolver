@@ -13,7 +13,7 @@
 ### Verification
 
 - Automated unit, provider-contract, platform editing, project-configuration, packaging, and pinned Plugin Verifier gates are required by CI.
-- IntelliJ IDEA 2025.2.5 sandbox: startup, K2 plugin load, search/result layout, Add, and all four Copy formats passed on 2026-09-13; one-step Undo and offline behavior remain pending.
+- IntelliJ IDEA 2025.2.5 sandbox: startup, K2 plugin load, search/result layout, Add, all four Copy formats, and one-step Undo passed on 2026-09-13. The initial offline check exposed empty results because providers were disabled before cache lookup; the cache-only fix has automated coverage and awaits an interactive retest.
 - IntelliJ IDEA pinned interaction matrix: pending before Marketplace publication.
 - Android Studio 2025.2.3.9 interaction matrix: pending before Marketplace publication.
 - Android Studio 2025.3.1.6 interaction matrix: pending before Marketplace publication.

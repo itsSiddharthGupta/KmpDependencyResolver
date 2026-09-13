@@ -28,7 +28,6 @@ class ResolverSettings : PersistentStateComponent<ResolverSettings.State> {
     }
 
     fun enabledProviderIds(): List<String> {
-        if (stored.offlineMode) return emptyList()
         return buildList {
             if (stored.klibsEnabled) add("klibs")
             if (stored.mavenCentralEnabled) add("maven-central")
