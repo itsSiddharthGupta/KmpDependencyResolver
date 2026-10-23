@@ -87,6 +87,30 @@ class JdkHttpTransportTest {
     }
 
     @Test
+    fun `redirect is followed only to an allowed HTTPS host and within the hop limit`() {
+        val release = URI("https://github.com/owner/repo/releases/download/v1/catalog.json")
+        fun redirectTo(location: String) = response(status = 302, headers = mapOf("location" to listOf(location)))
+        val asset = "https://release-assets.githubusercontent.com/github-production-release-asset/1/abc?sig=x"
+        val requested = mutableListOf<String>()
+        val transport = JdkHttpTransport(sender = HttpSender { request, _ ->
+            requested += request.uri().toString()
+            if (request.uri().host == "github.com") redirectTo(asset) else response(body = "{\"ok\":true}".encodeToByteArray())
+        })
+        val allowed = HttpRequestSpec(release, expectedContentTypes = setOf("application/json"), allowedRedirectHosts = setOf("release-assets.githubusercontent.com"))
+
+        assertThat(transport.execute(allowed).body.decodeToString()).isEqualTo("{\"ok\":true}")
+        assertThat(requested).containsExactly(release.toString(), asset)
+
+        // Search/provider requests keep the default: no redirect is ever followed.
+        assertCode("REDIRECT_REJECTED", HttpRequestSpec(release, expectedContentTypes = setOf("application/json")), redirectTo(asset))
+        assertCode("REDIRECT_REJECTED", allowed, redirectTo("https://evil.example/catalog.json"))
+        assertCode("REDIRECT_REJECTED", allowed, redirectTo("http://release-assets.githubusercontent.com/x"))
+        val loop = JdkHttpTransport(sender = HttpSender { _, _ -> redirectTo(asset) })
+        assertThatThrownBy { loop.execute(allowed.copy(maxRedirects = 2)) }
+            .isInstanceOf(HttpTransportException::class.java).extracting("code").isEqualTo("REDIRECT_REJECTED")
+    }
+
+    @Test
     fun `timeouts name the unresponsive host`() {
         val request = HttpRequestSpec(URI("https://api.klibs.io/mcp"), expectedContentTypes = setOf("application/json"))
         val transport = JdkHttpTransport(sender = HttpSender { _, _ -> throw java.net.http.HttpTimeoutException("request timed out") })

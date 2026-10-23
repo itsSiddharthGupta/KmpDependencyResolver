@@ -9,6 +9,12 @@ data class HttpRequestSpec(
     val headers: Map<String, String> = emptyMap(),
     val expectedContentTypes: Set<String>,
     val maxBytes: Int = 2 * 1024 * 1024,
+    /**
+     * HTTPS hosts this request may be redirected to. Empty (the default) refuses every redirect; only the
+     * signed recipe-catalog download opts in, because GitHub serves release assets through a redirect.
+     */
+    val allowedRedirectHosts: Set<String> = emptySet(),
+    val maxRedirects: Int = 2,
 )
 
 data class HttpPayload(

@@ -41,6 +41,65 @@ class RemoteRecipeUpdaterTest {
     }
 
     @Test
+    fun `only the catalog download may follow GitHub release redirects`() {
+        val fixture = Fixture()
+        fixture.transport.responses += fixture.manifestResponse()
+        fixture.transport.responses += payload(fixture.remoteCatalog)
+
+        fixture.updater.update(RemoteRecipeUpdater.MANIFEST_URI)
+
+        val (manifest, catalog) = fixture.transport.requests
+        assertThat(manifest.allowedRedirectHosts).isEmpty()
+        assertThat(catalog.allowedRedirectHosts).containsExactlyInAnyOrder("release-assets.githubusercontent.com", "objects.githubusercontent.com")
+    }
+
+    @Test
+    fun `redirected catalog through the real transport installs only when the signed digest matches`() {
+        val fixture = Fixture()
+        val manifest = fixture.manifestResponse().body
+        fun updaterServing(catalog: ByteArray) = RemoteRecipeUpdater(
+            com.kmpdependencyresolver.providers.http.JdkHttpTransport(sender = com.kmpdependencyresolver.providers.http.HttpSender { request, _ ->
+                val uri = request.uri()
+                when {
+                    uri.host == "raw.githubusercontent.com" -> FakeResponse(200, "text/plain; charset=utf-8", manifest, uri)
+                    uri.host == "github.com" -> FakeResponse(302, null, ByteArray(0), uri, "https://release-assets.githubusercontent.com/github-production-release-asset/1/abc")
+                    else -> FakeResponse(200, "application/octet-stream", catalog, uri)
+                }
+            }),
+            Files.createTempDirectory("recipe-cache-"), fixture.keys.public.encoded, fixture.bundledCatalog,
+        )
+
+        val genuine = updaterServing(fixture.remoteCatalog).update(RemoteRecipeUpdater.MANIFEST_URI)
+        val tampered = updaterServing(fixture.remoteCatalog.copyOf().also { it[it.size - 2] = 'X'.code.toByte() })
+            .update(RemoteRecipeUpdater.MANIFEST_URI)
+
+        assertThat(genuine.updated).isTrue()
+        assertThat(genuine.catalog.find(com.kmpdependencyresolver.core.model.Coordinates("io.coil-kt.coil3", "coil-compose-core"))).hasSize(1)
+        assertThat(tampered.updated).isFalse()
+        assertThat(tampered.failure).hasMessage("Catalog digest mismatch")
+    }
+
+    private class FakeResponse(
+        private val status: Int,
+        contentType: String?,
+        private val body: ByteArray,
+        private val uri: URI,
+        location: String? = null,
+    ) : java.net.http.HttpResponse<java.io.InputStream> {
+        private val headers = java.net.http.HttpHeaders.of(
+            buildMap { contentType?.let { put("content-type", listOf(it)) }; location?.let { put("location", listOf(it)) } },
+        ) { _, _ -> true }
+        override fun statusCode() = status
+        override fun headers() = headers
+        override fun body(): java.io.InputStream = java.io.ByteArrayInputStream(body)
+        override fun request(): java.net.http.HttpRequest = throw UnsupportedOperationException()
+        override fun previousResponse(): java.util.Optional<java.net.http.HttpResponse<java.io.InputStream>> = java.util.Optional.empty()
+        override fun sslSession() = java.util.Optional.empty<javax.net.ssl.SSLSession>()
+        override fun uri() = uri
+        override fun version() = java.net.http.HttpClient.Version.HTTP_2
+    }
+
+    @Test
     fun `untrusted location signature length digest and schema failures preserve last good`() {
         val fixture = Fixture()
         val lastGood = fixture.cache.resolve("catalog-v1.json")
@@ -129,9 +188,11 @@ class RemoteRecipeUpdaterTest {
 
     private class QueueTransport : HttpTransport {
         val responses = ArrayDeque<HttpPayload>()
+        val requests = mutableListOf<HttpRequestSpec>()
         var calls = 0
         override fun execute(request: HttpRequestSpec): HttpPayload {
             calls++
+            requests += request
             return responses.removeFirst()
         }
     }
