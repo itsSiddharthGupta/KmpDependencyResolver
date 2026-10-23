@@ -1,6 +1,8 @@
 package com.kmpdependencyresolver.plugin.project
 
 import com.intellij.psi.util.PsiTreeUtil
+import com.kmpdependencyresolver.core.change.AliasGenerator
+import com.kmpdependencyresolver.core.change.JVM_SOURCE_SET
 import com.kmpdependencyresolver.core.model.SourceSetNode
 import com.kmpdependencyresolver.core.model.TargetFamily
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -17,6 +19,8 @@ data class KotlinDslInspection(
     val copyOnlyReasons: List<String>,
     /** Kotlin target names compiled by each main source set, e.g. `commonMain` -> `[android, iosArm64]`. */
     val sourceSetTargetNames: Map<String, List<String>> = emptyMap(),
+    /** A plain Kotlin/JVM module (kotlin("jvm") without KMP targets), modelled as the single source set [JVM_SOURCE_SET]. */
+    val jvmModule: Boolean = false,
 )
 
 /**
@@ -28,7 +32,8 @@ data class KotlinDslInspection(
  * source sets cover the union of their children's targets.
  */
 class KotlinDslSourceSetInspector {
-    fun inspect(file: KtFile): KotlinDslInspection {
+    /** @param pluginIdsByAlias catalog plugin ids keyed by [AliasGenerator.accessorKey], to resolve `alias(libs.plugins.…)`. */
+    fun inspect(file: KtFile, pluginIdsByAlias: Map<String, String> = emptyMap()): KotlinDslInspection {
         val text = file.text
         val kotlinLambdas = PsiTreeUtil.findChildrenOfType(file, KtCallExpression::class.java)
             .filter { it.calleeExpression?.text == "kotlin" && lambdaOf(it) != null }
@@ -110,6 +115,16 @@ class KotlinDslSourceSetInspector {
 
         val plugins = PLUGIN_ALIAS.findAll(text).map { it.groupValues[1].replace('.', '-') }.toSet()
         val usedConfigurations = CONFIGURATION.findAll(text).map { it.groupValues[1] }.toSet()
+        val pluginIds = KOTLIN_PLUGIN.findAll(text).map { "org.jetbrains.kotlin.${it.groupValues[1]}" }.toSet() +
+            PLUGIN_ID.findAll(text).map { it.groupValues[1] } +
+            plugins.mapNotNull { pluginIdsByAlias[AliasGenerator.accessorKey(it)] }
+        if (targets.isEmpty() && KOTLIN_JVM_PLUGIN in pluginIds && pluginIds.none { it.startsWith("com.android.") }) {
+            // Plain Kotlin/JVM (for example a Ktor server): one "main" source set compiling for the JVM.
+            return KotlinDslInspection(
+                setOf(TargetFamily.JVM), listOf(SourceSetNode(JVM_SOURCE_SET, setOf(TargetFamily.JVM))), plugins,
+                usedConfigurations + JVM_CONFIGURATIONS, emptyList(), emptyMap(), jvmModule = true,
+            )
+        }
         val configurations = if (targets.isEmpty()) usedConfigurations else usedConfigurations + KMP_CONFIGURATIONS
         val reasons = buildList {
             if (targets.isEmpty()) add("No Kotlin Multiplatform targets are declared in this module's kotlin { } block.")
@@ -170,6 +185,10 @@ class KotlinDslSourceSetInspector {
             "linux" to TargetFamily.LINUX, "mingw" to TargetFamily.MINGW, "js" to TargetFamily.JS, "wasm" to TargetFamily.WASM,
         )
         val KMP_CONFIGURATIONS = setOf("implementation", "api", "compileOnly", "runtimeOnly")
+        val JVM_CONFIGURATIONS = KMP_CONFIGURATIONS + "testImplementation"
+        const val KOTLIN_JVM_PLUGIN = "org.jetbrains.kotlin.jvm"
+        val KOTLIN_PLUGIN = Regex("""\bkotlin\(\s*"([A-Za-z0-9.-]+)"\s*\)""")
+        val PLUGIN_ID = Regex("""\bid\(\s*"([A-Za-z0-9_.-]+)"\s*\)""")
 
         val SOURCE_SET = Regex("\\b([A-Za-z][A-Za-z0-9]*Main)\\b")
         val DEPENDS_ON = Regex("([A-Za-z][A-Za-z0-9]*Main)(?:\\.get\\(\\))?\\.dependsOn\\(\\s*([A-Za-z][A-Za-z0-9]*Main)(?:\\.get\\(\\))?\\s*\\)")

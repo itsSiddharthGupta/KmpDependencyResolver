@@ -117,7 +117,9 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             ?.let { file -> ReadAction.compute<String, RuntimeException> { FileDocumentManager.getInstance().getCachedDocument(file)?.text ?: VfsUtilCore.loadText(file) } }
             .orEmpty()
         return ChangeProjectSnapshot(
-            moduleId, VersionCatalogParser.parse(catalogText).toState(), module.configurations,
+            // KSP processors from recipes use the plain ksp configuration in a Kotlin/JVM module.
+            moduleId, VersionCatalogParser.parse(catalogText).toState(),
+            if (module.jvmModule) module.configurations + "ksp" else module.configurations,
             sourceSetTargets = module.sourceSets.associate { it.name to it.descendantTargets },
             sourceSetTargetNames = module.sourceSetTargetNames,
         )

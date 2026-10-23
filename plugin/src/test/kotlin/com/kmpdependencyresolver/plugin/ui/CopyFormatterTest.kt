@@ -63,6 +63,14 @@ dependencies {
     }
 
     @Test
+    fun `full recipe for a Kotlin JVM module uses the top level dependencies block`() {
+        val text = CopyFormatter().format(selection.copy(sourceSet = "main"), CopyKind.FULL_RECIPE)
+
+        assertThat(text).endsWith("dependencies {\n    implementation(libs.room.runtime)\n    ksp(libs.room.compiler)\n}")
+        assertThat(text).doesNotContain("main.dependencies")
+    }
+
+    @Test
     fun `copy menu labels are human readable`() {
         assertThat(CopyKind.entries.map { it.label }).containsExactly("Coordinate", "Kotlin DSL", "Version catalog", "Full recipe")
     }

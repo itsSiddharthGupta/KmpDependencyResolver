@@ -1,6 +1,7 @@
 package com.kmpdependencyresolver.plugin.editing
 
 import com.kmpdependencyresolver.core.change.GradleOperation
+import com.kmpdependencyresolver.core.change.JVM_SOURCE_SET
 
 /**
  * Applies planned operations to Kotlin DSL text. All searches run on a code mask in which comments and
@@ -23,7 +24,12 @@ class KotlinDslPlanRenderer {
                 val reference = "libs.${accessor(operation.alias)}"
                 val argument = if (operation.platform) "platform($reference)" else reference
                 val expression = "${operation.configuration}($argument)"
-                if (!containsDependency(result, operation.sourceSet, expression)) result = insertDependency(result, operation.sourceSet, expression)
+                result = if (operation.sourceSet == JVM_SOURCE_SET) {
+                    // Plain Kotlin/JVM module: no source-set blocks, just the top-level dependencies { }.
+                    if (containsCode(result, expressionPattern(expression))) result else insertTopLevelDependency(result, expression)
+                } else {
+                    if (containsDependency(result, operation.sourceSet, expression)) result else insertDependency(result, operation.sourceSet, expression)
+                }
             }
         operations.filterIsInstance<GradleOperation.AddTopLevelDependency>()
             .sortedWith(compareBy({ it.configuration }, { it.alias })).forEach { operation ->
@@ -58,9 +64,20 @@ class KotlinDslPlanRenderer {
 
     private fun containsDependency(text: String, sourceSet: String, expression: String): Boolean {
         val mask = codeMask(text)
-        val pattern = Regex(Regex.escape(expression).replace("\\(", "\\(\\s*").replace("\\)", "\\s*\\)"))
+        val pattern = expressionPattern(expression)
         return pattern.findAll(mask).any { match -> enclosingSourceSet(text, mask, match.range.first) == sourceSet }
     }
+
+    /** Matches [expression] tolerating whitespace inside its parentheses. Escapes per character because Regex.escape quotes with \Q…\E. */
+    private fun expressionPattern(expression: String) = Regex(
+        expression.map { char ->
+            when (char) {
+                '(' -> "\\(\\s*"
+                ')' -> "\\s*\\)"
+                else -> Regex.escape(char.toString())
+            }
+        }.joinToString(""),
+    )
 
     /** Name of the source-set block (`commonMain.dependencies { }` / `val commonMain by getting { }`) around [index]. */
     private fun enclosingSourceSet(text: String, mask: String, index: Int): String? {

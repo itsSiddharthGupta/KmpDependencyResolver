@@ -1,6 +1,7 @@
 package com.kmpdependencyresolver.plugin.ui
 
 import com.kmpdependencyresolver.core.change.AliasGenerator
+import com.kmpdependencyresolver.core.change.JVM_SOURCE_SET
 import com.kmpdependencyresolver.core.model.Candidate
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
 
@@ -71,7 +72,8 @@ $alias = { module = "${selection.candidate.coordinates.notation}", version.ref =
             plugins.forEach { appendLine("    alias(libs.plugins.${accessor(it.alias)})") }
             appendLine("}")
             appendLine()
-            appendLine("${selection.sourceSet}.dependencies {")
+            // A Kotlin/JVM module has no source-set blocks; its dependencies go straight into dependencies { }.
+            appendLine(if (selection.sourceSet == JVM_SOURCE_SET) "dependencies {" else "${selection.sourceSet}.dependencies {")
             appendLine("    ${selection.configuration}(libs.${accessor(alias)})")
             val (kmpProcessors, sourceSetProcessors) = processors.partition { it.configuration == "ksp" && selection.kspTargets.isNotEmpty() }
             sourceSetProcessors.forEach { appendLine("    ${it.configuration}(libs.${accessor(AliasGenerator.kebab(it.coordinates.artifact))})") }

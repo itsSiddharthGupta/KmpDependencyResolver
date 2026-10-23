@@ -107,4 +107,27 @@ class KotlinDslSourceSetInspectorTest : BasePlatformTestCase() {
         assertThat(result.targets).isEmpty()
         assertThat(result.copyOnlyReasons).containsExactly("No Kotlin Multiplatform targets are declared in this module's kotlin { } block.")
     }
+
+    fun `test Kotlin JVM module is modelled as one main source set`() {
+        val byCall = inspect("plugins { kotlin(\"jvm\") }\ndependencies { }")
+        val byAlias = KotlinDslSourceSetInspector().inspect(
+            KtPsiFactory(project).createFile("build.gradle.kts", "plugins {\n    alias(libs.plugins.kotlinJvm)\n    alias(libs.plugins.ktor)\n}\n"),
+            mapOf("kotlinjvm" to "org.jetbrains.kotlin.jvm", "ktor" to "io.ktor.plugin"),
+        )
+
+        listOf(byCall, byAlias).forEach { result ->
+            assertThat(result.jvmModule).isTrue()
+            assertThat(result.targets).containsExactly(TargetFamily.JVM)
+            assertThat(result.sourceSets.map { it.name }).containsExactly("main")
+            assertThat(result.configurations).contains("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
+            assertThat(result.copyOnlyReasons).isEmpty()
+        }
+    }
+
+    fun `test Android only module is not treated as Kotlin JVM`() {
+        val result = inspect("plugins {\n    id(\"com.android.application\")\n    kotlin(\"jvm\")\n}\n")
+
+        assertThat(result.jvmModule).isFalse()
+        assertThat(result.copyOnlyReasons).isNotEmpty()
+    }
 }

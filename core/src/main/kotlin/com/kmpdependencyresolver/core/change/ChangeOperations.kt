@@ -12,6 +12,12 @@ sealed interface CatalogOperation {
     data class PutPlugin(val alias: String, val pluginId: String, val versionAlias: String) : CatalogOperation
 }
 
+/**
+ * The pseudo source set of a plain Kotlin/JVM module. An [GradleOperation.AddDependency] for it is written
+ * into the module's top-level `dependencies { }` block rather than a KMP source-set block.
+ */
+const val JVM_SOURCE_SET = "main"
+
 sealed interface GradleOperation {
     data class AddDependency(val sourceSet: String, val configuration: String, val alias: String, val platform: Boolean) : GradleOperation
     data class AddPluginAlias(val alias: String, val applyFalse: Boolean) : GradleOperation

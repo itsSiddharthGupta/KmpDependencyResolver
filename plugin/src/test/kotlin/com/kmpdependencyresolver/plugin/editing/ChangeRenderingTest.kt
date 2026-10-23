@@ -232,5 +232,48 @@ dependencies {
         assertThat(renderer.renderRoot("allprojects { }\n", listOf(GradleOperation.AddRootPluginAlias("ksp")))).isEqualTo("allprojects { }\n")
     }
 
+    fun `test Kotlin JVM module dependencies go into the top level block`() {
+        val serverScript = Files.readString(Paths.get(testDataPath, "projects/kmp-with-jvm-server/server/build.gradle.kts"))
+        val operations = listOf(
+            GradleOperation.AddPluginAlias("ksp", false),
+            GradleOperation.AddDependency("main", "implementation", "ktor-bom", true),
+            GradleOperation.AddDependency("main", "implementation", "ktor-server-content-negotiation", false),
+            GradleOperation.AddDependency("main", "ksp", "room-compiler", false),
+        )
+
+        val rendered = KotlinDslPlanRenderer().render(serverScript, operations)
+
+        assertThat(rendered).contains("    alias(libs.plugins.ktor)\n    alias(libs.plugins.ksp)\n}")
+        assertThat(rendered).endsWith(
+            """    testImplementation(libs.kotlin.testJunit)
+    implementation(platform(libs.ktor.bom))
+    implementation(libs.ktor.server.content.negotiation)
+    ksp(libs.room.compiler)
+}""",
+        )
+        assertThat(KotlinDslPlanRenderer().render(rendered, operations)).isEqualTo(rendered)
+        assertThat(PsiTreeUtil.findChildOfType(KtPsiFactory(project).createFile("build.gradle.kts", rendered), PsiErrorElement::class.java)).isNull()
+    }
+
+    fun `test Kotlin JVM module without a dependencies block gets one`() {
+        val rendered = KotlinDslPlanRenderer().render(
+            "plugins {\n    kotlin(\"jvm\")\n}\n",
+            listOf(GradleOperation.AddDependency("main", "implementation", "logback", false)),
+        )
+
+        assertThat(rendered).isEqualTo("plugins {\n    kotlin(\"jvm\")\n}\n\ndependencies {\n    implementation(libs.logback)\n}\n")
+    }
+
+    fun `test existing source set dependency with spacing is not added twice`() {
+        val original = "kotlin {\n    sourceSets {\n        commonMain.dependencies {\n            implementation( libs.ktor.client.core )\n        }\n    }\n}\n"
+
+        val rendered = KotlinDslPlanRenderer().render(
+            original,
+            listOf(GradleOperation.AddDependency("commonMain", "implementation", "ktor-client-core", false)),
+        )
+
+        assertThat(rendered).isEqualTo(original)
+    }
+
     private fun fixture(name: String): String = Files.readString(Paths.get(testDataPath, "editing", name))
 }

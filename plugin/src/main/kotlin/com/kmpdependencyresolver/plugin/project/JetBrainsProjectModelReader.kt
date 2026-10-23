@@ -9,6 +9,7 @@ import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
+import com.kmpdependencyresolver.core.change.AliasGenerator
 import com.kmpdependencyresolver.core.change.VersionCatalogParser
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.plugins.gradle.util.GradleConstants
@@ -24,6 +25,10 @@ class JetBrainsProjectModelReader(
         val rootFile = LocalFileSystem.getInstance().findFileByPath(gradleRoot)
         val index = ProjectFileIndex.getInstance(project)
         val buildFiles = linked?.projectDirs?.mapNotNull(::buildFileIn) ?: scanBuildFiles(index, rootFile)
+        val catalog = rootFile?.findFileByRelativePath(CATALOG_PATH)
+            ?: buildFiles.firstNotNullOfOrNull { index.getContentRootForFile(it)?.findFileByRelativePath(CATALOG_PATH) }
+        val parsed = VersionCatalogParser.parse(catalog?.let(::textOf).orEmpty())
+        val pluginIdsByAlias = parsed.plugins.entries.associate { AliasGenerator.accessorKey(it.key) to it.value.pluginId }
 
         val modules = buildFiles.distinctBy { it.path }.sortedBy { it.path }.map { buildFile ->
             // Before the first sync the content root is the Gradle root; after it, the linked root is authoritative.
@@ -31,10 +36,10 @@ class JetBrainsProjectModelReader(
             val id = gradlePath(idRoot, buildFile.parent.path)
             if (buildFile.extension == "kts") {
                 val ktFile = KtPsiFactory(project, markGenerated = false).createFile(buildFile.name, textOf(buildFile))
-                val result = inspector.inspect(ktFile)
+                val result = inspector.inspect(ktFile, pluginIdsByAlias)
                 GradleModuleSnapshot(
                     id, buildFile.path, result.targets, result.sourceSets, result.pluginAliases, result.configurations,
-                    result.copyOnlyReasons, result.sourceSetTargetNames,
+                    result.copyOnlyReasons, result.sourceSetTargetNames, result.jvmModule,
                 )
             } else {
                 GradleModuleSnapshot(
@@ -43,9 +48,6 @@ class JetBrainsProjectModelReader(
                 )
             }
         }
-        val catalog = rootFile?.findFileByRelativePath(CATALOG_PATH)
-            ?: buildFiles.firstNotNullOfOrNull { index.getContentRootForFile(it)?.findFileByRelativePath(CATALOG_PATH) }
-        val parsed = VersionCatalogParser.parse(catalog?.let(::textOf).orEmpty())
         ProjectSnapshot(gradleRoot, catalog?.path, modules, parsed.versions, parsed.libraries.keys)
     }
 

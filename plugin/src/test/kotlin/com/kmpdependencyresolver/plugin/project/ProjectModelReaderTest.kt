@@ -74,16 +74,18 @@ class ProjectModelReaderTest : BasePlatformTestCase() {
     }
 
     fun `test KMP project with a plain JVM Ktor server module`() {
-        // Layout of a real project: KMP app/network/core modules plus a kotlin("jvm") Ktor :server.
+        // Layout of a real project: KMP app/network/core, an Android app, and a kotlin("jvm") Ktor :server.
         myFixture.copyDirectoryToProject("projects/kmp-with-jvm-server", "")
 
         val snapshot = JetBrainsProjectModelReader().read(project)
         val byId = snapshot.modules.associateBy { it.id }
 
         assertThat(byId.keys).containsExactlyInAnyOrder(":", ":app:androidApp", ":app:network", ":app:shared", ":core", ":server")
-        assertThat(snapshot.addUnavailableReason(":server"))
-            .isEqualTo(":server isn't a Kotlin Multiplatform module. Add supports KMP modules only; use Copy to get the declaration.")
-        assertThat(snapshot.addUnavailableReason(":app:androidApp")).contains("isn't a Kotlin Multiplatform module")
+        assertThat(snapshot.addUnavailableReason(":server")).isNull()
+        assertThat(byId.getValue(":server").jvmModule).isTrue()
+        assertThat(byId.getValue(":server").sourceSets.map { it.name }).containsExactly("main")
+        assertThat(snapshot.addUnavailableReason(":app:androidApp"))
+            .isEqualTo(":app:androidApp isn't a Kotlin Multiplatform or Kotlin/JVM module. Add supports those only; use Copy to get the declaration.")
         assertThat(snapshot.addUnavailableReason(":app:network")).isNull()
         assertThat(snapshot.addUnavailableReason(":app:shared")).isNull()
         assertThat(snapshot.addUnavailableReason(":core")).isNull()

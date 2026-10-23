@@ -47,7 +47,24 @@ class AddDependencyFlowTest {
         assertThat(error).isInstanceOf(AddUnavailableException::class.java)
         val userError = (error as AddUnavailableException).error
         assertThat(userError.title).isEqualTo("Add isn't available for :server")
-        assertThat(userError.message).isEqualTo(":server isn't a Kotlin Multiplatform module. Add supports KMP modules only; use Copy to get the declaration.")
+        assertThat(userError.message).isEqualTo(":server isn't a Kotlin Multiplatform or Kotlin/JVM module. Add supports those only; use Copy to get the declaration.")
+    }
+
+    @Test
+    fun `Kotlin JVM module offers its main source set and JVM configurations`() {
+        val server = GradleModuleSnapshot(
+            ":server", "/project/server/build.gradle.kts", setOf(TargetFamily.JVM),
+            listOf(SourceSetNode("main", setOf(TargetFamily.JVM))), emptySet(),
+            setOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation"), jvmModule = true,
+        )
+        val withServer = snapshot().let { it.copy(modules = it.modules + server) }
+
+        val state = AddDependencyFlow(FakeBackend(withServer)).start(candidate(targets = setOf(TargetFamily.JVM)), ":server")
+
+        assertThat(state.sourceSets).containsExactly("main")
+        assertThat(state.selectedSourceSet).isEqualTo("main")
+        assertThat(state.configurations).contains("testImplementation")
+        assertThat(state.selectedConfiguration).isEqualTo("implementation")
     }
 
     @Test

@@ -15,6 +15,7 @@ data class GradleModuleSnapshot(
     val configurations: Set<String>,
     val copyOnlyReasons: List<String> = emptyList(),
     val sourceSetTargetNames: Map<String, List<String>> = emptyMap(),
+    val jvmModule: Boolean = false,
 )
 
 data class ProjectSnapshot(
@@ -29,14 +30,14 @@ data class ProjectSnapshot(
         else AddCapability.COPY_ONLY
 
     /**
-     * Why Add cannot edit [moduleId], phrased for the user, or null when Add is available. Plain JVM or
-     * Android modules are out of scope on purpose: Add edits Kotlin Multiplatform modules only.
+     * Why Add cannot edit [moduleId], phrased for the user, or null when Add is available. Android-only
+     * modules are out of scope on purpose: Add edits Kotlin Multiplatform and plain Kotlin/JVM modules.
      */
     fun addUnavailableReason(moduleId: String): String? {
         val module = modules.firstOrNull { it.id == moduleId } ?: return "Module $moduleId is no longer part of the project."
         return when {
             module.buildFile.endsWith(".kts") && module.targets.isEmpty() ->
-                "$moduleId isn't a Kotlin Multiplatform module. Add supports KMP modules only; use Copy to get the declaration."
+                "$moduleId isn't a Kotlin Multiplatform or Kotlin/JVM module. Add supports those only; use Copy to get the declaration."
             module.copyOnlyReasons.isNotEmpty() ->
                 "Add can't safely edit $moduleId: ${module.copyOnlyReasons.joinToString(" ")} Use Copy instead."
             catalogPath == null ->

@@ -125,6 +125,28 @@ class ChangePlannerTest {
     }
 
     @Test
+    fun `Kotlin JVM module plans BOM library and plain KSP in its main source set`() {
+        val recipe = recipe(
+            bom = BomRule(Coordinates("io.ktor", "ktor-bom")),
+            processors = listOf(ProcessorRequirement(Coordinates("sample", "processor"), "ksp", true)),
+        )
+        val project = project(configurations = setOf("implementation", "ksp"))
+            .copy(sourceSetTargets = mapOf(JVM_SOURCE_SET to setOf(TargetFamily.JVM)))
+        val selection = selection("io.ktor", "ktor-server-core", "3.6.0", recipe).copy(
+            recommendation = PlacementRecommendation(JVM_SOURCE_SET, EvidenceKind.VERIFIED, "test", false),
+        )
+
+        val result = ChangePlanner().plan(selection, project)
+
+        assertThat(result.conflicts).isEmpty()
+        assertThat(result.plan!!.gradleOperations).containsExactly(
+            GradleOperation.AddDependency("main", "implementation", "ktor-bom", true),
+            GradleOperation.AddDependency("main", "implementation", "ktor-server-core", false),
+            GradleOperation.AddDependency("main", "ksp", "processor", false),
+        )
+    }
+
+    @Test
     fun `BOM is rejected in a source set that compiles non JVM targets`() {
         val recipe = recipe(bom = BomRule(Coordinates("androidx.compose", "compose-bom")))
         val project = project().copy(
