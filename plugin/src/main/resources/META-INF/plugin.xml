@@ -13,7 +13,6 @@
   <depends>com.intellij.modules.java</depends>
   <depends>com.intellij.gradle</depends>
   <depends>org.jetbrains.kotlin</depends>
-  <depends optional="true" config-file="toml-support.xml">org.toml.lang</depends>
   <extensions defaultExtensionNs="com.intellij">
     <applicationConfigurable parentId="tools"
                              displayName="KMP Dependency Resolver"

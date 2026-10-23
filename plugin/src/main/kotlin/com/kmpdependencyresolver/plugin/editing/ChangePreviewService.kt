@@ -1,6 +1,6 @@
 package com.kmpdependencyresolver.plugin.editing
 
-import com.intellij.openapi.editor.Document
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -54,23 +54,29 @@ class ChangePreviewService(
         return ChangePreview(changed)
     }
 
+    /** Safe off the EDT: the VFS lookup runs outside the read lock, document access inside it. */
     private fun filePreview(path: String, kind: PreviewFileKind, render: (String) -> String): FileChangePreview {
-        val file = LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
+        val file = LocalFileSystem.getInstance().findFileByPath(path)
+            ?: LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
             ?: throw PreviewException("FILE_NOT_FOUND", "File not found: $path")
-        val document = FileDocumentManager.getInstance().getDocument(file)
-            ?: throw PreviewException("DOCUMENT_UNAVAILABLE", "No document for: $path")
-        val original = document.text
-        return FileChangePreview(path, kind, original, render(original), sha256(original), document.modificationStamp)
+        val (original, stamp) = ReadAction.compute<Pair<String, Long>, RuntimeException> {
+            val document = FileDocumentManager.getInstance().getDocument(file)
+                ?: throw PreviewException("DOCUMENT_UNAVAILABLE", "No document for: $path")
+            document.text to document.modificationStamp
+        }
+        return FileChangePreview(path, kind, original, render(original), sha256(original), stamp)
     }
 
     companion object {
         fun validate(project: Project, kind: PreviewFileKind, text: String) {
-            val psi = when (kind) {
-                PreviewFileKind.KOTLIN_DSL -> KtPsiFactory(project).createFile("build.gradle.kts", text)
-                PreviewFileKind.VERSION_CATALOG -> PsiFileFactory.getInstance(project).createFileFromText("libs.versions.toml", text)
+            val error = ReadAction.compute<PsiErrorElement?, RuntimeException> {
+                val psi = when (kind) {
+                    PreviewFileKind.KOTLIN_DSL -> KtPsiFactory(project).createFile("build.gradle.kts", text)
+                    PreviewFileKind.VERSION_CATALOG -> PsiFileFactory.getInstance(project).createFileFromText("libs.versions.toml", text)
+                }
+                PsiTreeUtil.findChildOfType(psi, PsiErrorElement::class.java)
             }
-            val error = PsiTreeUtil.findChildOfType(psi, PsiErrorElement::class.java)
-            if (error != null) throw PreviewException("INVALID_RENDER", error.errorDescription)
+            if (error != null) throw PreviewException("INVALID_RENDER", ReadAction.compute<String, RuntimeException> { error.errorDescription })
         }
 
         fun sha256(text: String): String = MessageDigest.getInstance("SHA-256")

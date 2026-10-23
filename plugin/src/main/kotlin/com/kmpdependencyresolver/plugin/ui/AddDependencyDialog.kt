@@ -16,6 +16,7 @@ import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.ModuleModel
 import com.kmpdependencyresolver.core.model.PlacementRecommendation
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
+import com.kmpdependencyresolver.core.search.defaultVersion
 import com.kmpdependencyresolver.plugin.editing.ApplyRejectedException
 import com.kmpdependencyresolver.plugin.editing.ApplyResult
 import com.kmpdependencyresolver.plugin.editing.ChangePreview
@@ -50,7 +51,15 @@ data class ConfirmationState(
     val companions: List<CompanionChoice>,
     val snapshot: ProjectSnapshot,
     val notice: String? = null,
-)
+) {
+    /** The same choices preselected again, e.g. when the dialog reopens after a preview error. */
+    fun withOptions(options: AddOptions): ConfirmationState = copy(
+        selectedVersion = options.version.takeIf { it in versions } ?: selectedVersion,
+        selectedSourceSet = options.sourceSet?.takeIf { it in sourceSets } ?: selectedSourceSet,
+        selectedConfiguration = options.configuration.takeIf { it in configurations } ?: selectedConfiguration,
+        companions = companions.map { it.copy(selected = it.locked || it.id in options.selectedCompanionIds) },
+    )
+}
 
 data class AddOptions(
     val version: String,
@@ -89,7 +98,7 @@ class AddDependencyFlow(
     private val backend: AddDependencyBackend,
     private val recommender: SourceSetRecommender = SourceSetRecommender(),
 ) {
-    fun start(candidate: Candidate, moduleId: String): ConfirmationState {
+    fun start(candidate: Candidate, moduleId: String, preferredVersion: String? = null): ConfirmationState {
         val snapshot = backend.snapshot()
         val module = snapshot.modules.firstOrNull { it.id == moduleId }
             ?: throw IllegalArgumentException("Module $moduleId is unavailable")
@@ -116,7 +125,7 @@ class AddDependencyFlow(
             }
         }.sortedBy { it.id }
         val versions = candidate.versions.map { it.value }
-        val selectedVersion = candidate.versions.firstOrNull { it.stable }?.value ?: versions.firstOrNull()
+        val selectedVersion = preferredVersion?.takeIf { it in versions } ?: defaultVersion(candidate, includePreRelease = false)
             ?: throw IllegalArgumentException("${candidate.coordinates.notation} has no selectable version")
         return remember(ConfirmationState(
             candidate, moduleId, versions, selectedVersion, sourceSets,

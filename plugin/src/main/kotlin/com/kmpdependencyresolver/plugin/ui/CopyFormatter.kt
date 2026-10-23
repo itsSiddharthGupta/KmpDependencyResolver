@@ -4,14 +4,24 @@ import com.kmpdependencyresolver.core.change.AliasGenerator
 import com.kmpdependencyresolver.core.model.Candidate
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
 
-enum class CopyKind { COORDINATE, KOTLIN_DSL, VERSION_CATALOG, FULL_RECIPE }
+enum class CopyKind(val label: String) {
+    COORDINATE("Coordinate"),
+    KOTLIN_DSL("Kotlin DSL"),
+    VERSION_CATALOG("Version catalog"),
+    FULL_RECIPE("Full recipe"),
+}
 
+/**
+ * @property kspTargets Kotlin target names compiled by [sourceSet]; when present, KSP processors are
+ * written as per-target `add("ksp<Target>", …)` calls, which is how KSP runs in Kotlin Multiplatform.
+ */
 data class CopySelection(
     val candidate: Candidate,
     val version: String,
     val sourceSet: String,
     val configuration: String,
     val recipe: DependencyRecipe? = null,
+    val kspTargets: List<String> = emptyList(),
 )
 
 class CopyFormatter {
@@ -46,6 +56,8 @@ $alias = { module = "${selection.candidate.coordinates.notation}", version.ref =
         return buildString {
             appendLine("[versions]")
             appendLine("$alias = \"${selection.version}\"")
+            // The plugin version is not known here; the placeholder keeps version.ref resolvable once filled in.
+            plugins.forEach { appendLine("${it.alias} = \"$PLUGIN_VERSION_PLACEHOLDER\" # set the ${it.pluginId} version") }
             appendLine()
             appendLine("[libraries]")
             catalogLibraries.forEach(::appendLine)
@@ -61,10 +73,27 @@ $alias = { module = "${selection.candidate.coordinates.notation}", version.ref =
             appendLine()
             appendLine("${selection.sourceSet}.dependencies {")
             appendLine("    ${selection.configuration}(libs.${accessor(alias)})")
-            processors.forEach { appendLine("    ${it.configuration}(libs.${accessor(AliasGenerator.kebab(it.coordinates.artifact))})") }
+            val (kmpProcessors, sourceSetProcessors) = processors.partition { it.configuration == "ksp" && selection.kspTargets.isNotEmpty() }
+            sourceSetProcessors.forEach { appendLine("    ${it.configuration}(libs.${accessor(AliasGenerator.kebab(it.coordinates.artifact))})") }
             append("}")
+            if (kmpProcessors.isNotEmpty()) {
+                appendLine()
+                appendLine()
+                appendLine("dependencies {")
+                kmpProcessors.forEach { processor ->
+                    val reference = "libs.${accessor(AliasGenerator.kebab(processor.coordinates.artifact))}"
+                    selection.kspTargets.forEach { target ->
+                        appendLine("    add(\"ksp${target.replaceFirstChar(Char::uppercaseChar)}\", $reference)")
+                    }
+                }
+                append("}")
+            }
         }
     }
 
     private fun accessor(alias: String) = alias.replace(Regex("[-_]+"), ".")
+
+    companion object {
+        const val PLUGIN_VERSION_PLACEHOLDER = "<plugin version>"
+    }
 }

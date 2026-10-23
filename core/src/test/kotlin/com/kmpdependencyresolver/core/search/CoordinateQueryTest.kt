@@ -29,3 +29,21 @@ class CoordinateQueryTest {
         assertThat(isExactQueryMatch(coordinates, "ktor")).isFalse()
     }
 }
+
+class DefaultVersionTest {
+    @Test
+    fun `newest stable by default and newest overall when pre-releases are requested`() {
+        val candidate = com.kmpdependencyresolver.core.model.Candidate(
+            Coordinates("io.ktor", "ktor-client-core"), "ktor",
+            listOf(
+                com.kmpdependencyresolver.core.model.DependencyVersion("3.9.0", true),
+                com.kmpdependencyresolver.core.model.DependencyVersion("3.10.0", true),
+                com.kmpdependencyresolver.core.model.DependencyVersion("3.11.0-rc1", false),
+            ),
+            emptySet(), com.kmpdependencyresolver.core.model.EvidenceKind.VERIFIED, emptySet(),
+        )
+
+        assertThat(defaultVersion(candidate, includePreRelease = false)).isEqualTo("3.10.0")
+        assertThat(defaultVersion(candidate, includePreRelease = true)).isEqualTo("3.11.0-rc1")
+    }
+}

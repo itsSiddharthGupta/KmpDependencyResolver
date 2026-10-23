@@ -52,6 +52,29 @@ class AddDependencyFlowTest {
     }
 
     @Test
+    fun `preferred version from the result row is preselected`() {
+        val state = AddDependencyFlow(FakeBackend(snapshot())).start(candidate(), ":shared", preferredVersion = "3.2.0-RC")
+
+        assertThat(state.selectedVersion).isEqualTo("3.2.0-RC")
+    }
+
+    @Test
+    fun `reopening after a preview error keeps the user's choices`() {
+        val state = AddDependencyFlow(FakeBackend(snapshot())).start(candidate(), ":shared")
+        val processor = state.companions.single { it.id.startsWith("processor:") }.id
+
+        val reopened = state.withOptions(
+            AddOptions("3.2.0-RC", "jvmMain", "api", setOf(processor), acknowledgeUnknown = false, incompatibilityPhrase = ""),
+        )
+
+        assertThat(reopened.selectedVersion).isEqualTo("3.2.0-RC")
+        assertThat(reopened.selectedSourceSet).isEqualTo("jvmMain")
+        assertThat(reopened.selectedConfiguration).isEqualTo("api")
+        assertThat(reopened.companions.single { it.id == processor }.selected).isTrue()
+        assertThat(reopened.companions.single { it.locked }.selected).isTrue()
+    }
+
+    @Test
     fun `unknown and incompatible evidence require explicit acknowledgements`() {
         val backend = FakeBackend(snapshot())
         val flow = AddDependencyFlow(backend)

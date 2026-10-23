@@ -32,6 +32,8 @@ data class RecipeUpdateResult(
     val catalog: JsonRecipeRegistry,
     val updated: Boolean,
     val code: String? = null,
+    /** Why an online update fell back to cached or bundled recipes, for logging. */
+    val failure: Throwable? = null,
 )
 
 class RemoteRecipeUpdater(
@@ -65,8 +67,8 @@ class RemoteRecipeUpdater(
             val registry = JsonRecipeRegistry.fromBytes(catalogPayload.body)
             install(catalogPayload.body)
             RecipeUpdateResult(registry, updated = true)
-        } catch (_: Exception) {
-            stale()
+        } catch (exception: Exception) {
+            stale().copy(failure = exception)
         }
     }
 

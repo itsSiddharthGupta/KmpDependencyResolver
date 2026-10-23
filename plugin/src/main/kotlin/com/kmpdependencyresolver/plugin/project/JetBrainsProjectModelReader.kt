@@ -20,8 +20,8 @@ class JetBrainsProjectModelReader(
         val basePath = checkNotNull(project.basePath) { "Project has no base path" }
         val linked = linkedGradleProjects(project, basePath)
         val gradleRoot = linked?.rootPath ?: basePath
+        // No synchronous VFS refresh here: it is not allowed under the read lock.
         val rootFile = LocalFileSystem.getInstance().findFileByPath(gradleRoot)
-            ?: LocalFileSystem.getInstance().refreshAndFindFileByPath(gradleRoot)
         val index = ProjectFileIndex.getInstance(project)
         val buildFiles = linked?.projectDirs?.mapNotNull(::buildFileIn) ?: scanBuildFiles(index, rootFile)
 

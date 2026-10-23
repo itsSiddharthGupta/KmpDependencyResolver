@@ -5,6 +5,7 @@ import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.TargetFamily
 import com.kmpdependencyresolver.core.search.ProviderFailure
 import com.kmpdependencyresolver.core.search.SearchRequest
+import com.kmpdependencyresolver.core.search.defaultVersion
 import com.kmpdependencyresolver.core.search.isExactQueryMatch
 import com.kmpdependencyresolver.providers.AggregatedSearchResult
 
@@ -26,6 +27,8 @@ data class SearchResultItem(
     val freshnessLabel: String?,
     val section: PublisherSection,
     val publisherName: String?,
+    /** Shown on the row and preselected by Copy and Add, so all three agree. */
+    val defaultVersion: String? = null,
 )
 
 data class SearchUiState(
@@ -80,7 +83,7 @@ class SearchPresenter(
                 }
                 ui.dispatch {
                     if (generation != currentGeneration) return@dispatch
-                    val items = result.candidates.map { candidate -> item(candidate, requiredTargets) }
+                    val items = result.candidates.map { candidate -> item(candidate, requiredTargets, includePreRelease) }
                         .sortedWith(
                             compareBy<SearchResultItem>({ it.section.ordinal }, { !isExactQueryMatch(it.candidate.coordinates, query) })
                                 .thenBy { it.group.ordinal }
@@ -118,7 +121,7 @@ class SearchPresenter(
         onState(next)
     }
 
-    private fun item(candidate: Candidate, required: Set<TargetFamily>): SearchResultItem {
+    private fun item(candidate: Candidate, required: Set<TargetFamily>, includePreRelease: Boolean): SearchResultItem {
         val group = when {
             candidate.evidence == EvidenceKind.INCOMPATIBLE -> ResultGroup.INCOMPATIBLE
             candidate.evidence == EvidenceKind.UNKNOWN || candidate.supportedTargets.isEmpty() -> ResultGroup.UNKNOWN
@@ -134,6 +137,6 @@ class SearchPresenter(
         }
         val publisher = officialPublishers.publisherFor(candidate.coordinates.group)
         val section = if (publisher == null) PublisherSection.COMMUNITY else PublisherSection.OFFICIAL
-        return SearchResultItem(candidate, group, evidence, freshness, section, publisher)
+        return SearchResultItem(candidate, group, evidence, freshness, section, publisher, defaultVersion(candidate, includePreRelease))
     }
 }

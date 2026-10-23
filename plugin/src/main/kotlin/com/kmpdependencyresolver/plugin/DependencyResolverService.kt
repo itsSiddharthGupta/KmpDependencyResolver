@@ -4,6 +4,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
@@ -70,9 +71,16 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
                     Base64.getDecoder().decode(RemoteRecipeUpdater.BUNDLED_PUBLIC_KEY_BASE64),
                     bundledRecipeBytes,
                 )
-                val result = updater.update(RemoteRecipeUpdater.MANIFEST_URI, settings.state.offlineMode)
-                recipeRegistry = result.catalog
-                recipeUpdateCode = result.code
+                try {
+                    val result = updater.update(RemoteRecipeUpdater.MANIFEST_URI, settings.state.offlineMode)
+                    recipeRegistry = result.catalog
+                    recipeUpdateCode = result.code
+                    result.failure?.let { LOG.warn("Remote recipe update failed; using cached or bundled recipes", it) }
+                } catch (exception: Exception) {
+                    // ExecutorService.submit would otherwise swallow this; bundled recipes stay in use.
+                    LOG.warn("Remote recipe update failed; using bundled recipes", exception)
+                    recipeUpdateCode = "RECIPE_UPDATE_FAILED"
+                }
             }
         }
     }
@@ -136,6 +144,10 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             if ("google-maven" in configuration.ids) add(GoogleMavenProvider(transport, cache, mode = configuration.mode))
         },
     )
+
+    private companion object {
+        val LOG = Logger.getInstance(DependencyResolverService::class.java)
+    }
 
     private data class ProviderConfiguration(val ids: List<String>, val mode: ProviderMode)
 }

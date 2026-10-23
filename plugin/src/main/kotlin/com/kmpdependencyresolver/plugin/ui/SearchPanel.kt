@@ -2,6 +2,14 @@ package com.kmpdependencyresolver.plugin.ui
 
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.externalSystem.service.project.manage.ProjectDataImportListener
+import com.intellij.openapi.progress.ProcessCanceledException
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.wm.ToolWindow
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener
+import com.intellij.util.concurrency.AppExecutorUtil
 import com.intellij.openapi.components.service
 import com.intellij.openapi.Disposable
 import com.intellij.notification.NotificationAction
@@ -16,8 +24,13 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
+import com.kmpdependencyresolver.core.compatibility.SourceSetRecommender
+import com.kmpdependencyresolver.core.model.Candidate
+import com.kmpdependencyresolver.core.model.ModuleModel
 import com.kmpdependencyresolver.core.model.TargetFamily
+import com.kmpdependencyresolver.core.search.defaultVersion
 import com.kmpdependencyresolver.plugin.DependencyResolverService
+import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
 import com.kmpdependencyresolver.plugin.settings.ResolverSettings
 import java.awt.BorderLayout
 import java.awt.Toolkit
@@ -48,6 +61,8 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     private val scheduled = Executors.newSingleThreadScheduledExecutor()
     private val workers = Executors.newFixedThreadPool(2)
     private val presenter: SearchPresenter
+    @Volatile private var snapshot: ProjectSnapshot? = null
+    private var updatingModules = false
 
     init {
         border = JBUI.Borders.empty(8)
@@ -57,10 +72,6 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         results.accessibleContext.accessibleName = "Dependency results"
         results.cellRenderer = ResultCellRenderer()
         previews.isSelected = ApplicationManager.getApplication().service<ResolverSettings>().state.includePreReleases
-
-        val snapshot = runCatching(service::projectSnapshot).getOrNull()
-        snapshot?.modules?.forEach { module.addItem(it.id) }
-        snapshot?.let(service::activeModuleId)?.let(module::setSelectedItem)
 
         val debounceScheduler = TaskScheduler { delay, task ->
             val future = scheduled.schedule(task, delay, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -73,10 +84,11 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         presenter = SearchPresenter(
             DependencySearchGateway(service::search), debounceScheduler, workerScheduler,
             UiDispatcher { task -> ApplicationManager.getApplication().invokeLater(task) },
-            activeModule = { service.activeModuleId() }, onState = ::render,
+            // Never read the project model on the EDT here; the combo is filled by refreshModules().
+            activeModule = { module.selectedItem as? String }, onState = ::render,
             onAdd = ::addDependency,
         )
-        module.addActionListener { search() }
+        module.addActionListener { if (!updatingModules) search() }
 
         val filters = JPanel().apply { add(module); add(target); add(previews) }
         val north = JPanel(BorderLayout()).apply { add(query, BorderLayout.NORTH); add(filters, BorderLayout.CENTER); add(status, BorderLayout.SOUTH) }
@@ -95,6 +107,39 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         target.addActionListener { search() }
         previews.addActionListener { search() }
         installKeyboardActions()
+
+        val connection = project.messageBus.connect(this)
+        connection.subscribe(ProjectDataImportListener.TOPIC, object : ProjectDataImportListener {
+            override fun onImportFinished(projectPath: String?) = refreshModules()
+        })
+        connection.subscribe(ToolWindowManagerListener.TOPIC, object : ToolWindowManagerListener {
+            override fun toolWindowShown(toolWindow: ToolWindow) {
+                if (toolWindow.id == TOOL_WINDOW_ID) refreshModules()
+            }
+        })
+        refreshModules()
+    }
+
+    /** Reads the project model in a cancellable background read action and refills the module list on the EDT. */
+    private fun refreshModules() {
+        ReadAction.nonBlocking<ProjectSnapshot?> { runCatching(service::projectSnapshot).onFailure { LOG.warn("Project model unavailable", it) }.getOrNull() }
+            .expireWith(this)
+            .finishOnUiThread(ModalityState.stateForComponent(this)) { loaded ->
+                snapshot = loaded
+                val previous = module.selectedItem as? String
+                updatingModules = true
+                try {
+                    module.removeAllItems()
+                    loaded?.modules?.forEach { module.addItem(it.id) }
+                    val preferred = previous?.takeIf { id -> loaded?.modules?.any { it.id == id } == true }
+                        ?: loaded?.let(service::activeModuleId)
+                    module.selectedItem = preferred
+                } finally {
+                    updatingModules = false
+                }
+                if ((module.selectedItem as? String) != previous) search()
+            }
+            .submit(AppExecutorUtil.getAppExecutorService())
     }
 
     private fun search() {
@@ -138,33 +183,45 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     }
 
     private fun addSelectedDependency() {
-        results.selectedValue?.candidate?.let { addDependency(it, module.selectedItem as? String) }
+        val item = results.selectedValue ?: return
+        addDependency(item.candidate, module.selectedItem as? String, item.defaultVersion)
     }
 
-    private fun addDependency(candidate: com.kmpdependencyresolver.core.model.Candidate, moduleId: String?) {
+    private fun addDependency(candidate: Candidate, moduleId: String?) =
+        addDependency(candidate, moduleId, defaultVersion(candidate, previews.isSelected))
+
+    private fun addDependency(candidate: Candidate, moduleId: String?, preferredVersion: String?) {
         if (moduleId == null) {
             Messages.showErrorDialog(project, "No Gradle module is available for Add. Copy is still available.", "Project not supported")
             return
         }
         val flow = AddDependencyFlow(service)
-        var confirmation = try {
-            flow.start(candidate, moduleId)
-        } catch (exception: RuntimeException) {
-            showError(UserFacingError.from("UNSUPPORTED_PROJECT", exception))
-            return
+        var confirmation = when (val started = inBackground("Reading project model") { flow.start(candidate, moduleId, preferredVersion) }) {
+            null -> return
+            else -> started.getOrElse { exception ->
+                showError(UserFacingError.from("UNSUPPORTED_PROJECT", exception))
+                return
+            }
         }
         while (true) {
             val dialog = AddDependencyDialog(project, confirmation)
             if (!dialog.showAndGet()) return
-            val preview = flow.preview(dialog.options(), confirmation)
+            val options = dialog.options()
+            val preview = inBackground("Preparing preview") { flow.preview(options, confirmation) }?.getOrElse { exception ->
+                showError(UserFacingError.from("UNEXPECTED", exception))
+                return
+            } ?: return
             if (!preview.applyEnabled) {
                 showError(preview.error ?: UserFacingError.from("UNEXPECTED"))
+                // Reopen with the user's choices rather than the original defaults.
+                confirmation = confirmation.withOptions(options)
                 continue
             }
             if (!ChangePreviewDialog(project, preview).showAndGet()) return
             when (val outcome = flow.apply(preview)) {
                 is AddApplyOutcome.Success -> {
                     showSuccess(outcome)
+                    refreshModules()
                     return
                 }
                 is AddApplyOutcome.Stale -> confirmation = outcome.confirmation
@@ -174,6 +231,27 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
                 }
             }
         }
+    }
+
+    /**
+     * Runs [task] on a pooled thread under a cancellable modal progress, so project-model reads and preview
+     * rendering stay off the EDT. Returns null when the user cancels.
+     */
+    private fun <T> inBackground(title: String, task: () -> T): Result<T>? {
+        var result: Result<T>? = null
+        val completed = ProgressManager.getInstance().runProcessWithProgressSynchronously(
+            {
+                result = try {
+                    Result.success(task())
+                } catch (exception: ProcessCanceledException) {
+                    throw exception
+                } catch (exception: RuntimeException) {
+                    Result.failure(exception)
+                }
+            },
+            title, true, project,
+        )
+        return if (completed) result else null
     }
 
     private fun showSuccess(outcome: AddApplyOutcome.Success) {
@@ -201,11 +279,10 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
 
     private fun showCopyMenu() {
         val item = results.selectedValue ?: return
-        val version = item.candidate.versions.firstOrNull()?.value ?: return
-        val selection = CopySelection(item.candidate, version, "commonMain", "implementation")
+        val selection = copySelection(item) ?: return
         JPopupMenu().apply {
             CopyKind.entries.forEach { kind ->
-                add(JMenuItem(kind.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)).apply {
+                add(JMenuItem(kind.label).apply {
                     addActionListener {
                         CopyPasteManager.getInstance().setContents(StringSelection(CopyFormatter().format(selection, kind)))
                     }
@@ -213,6 +290,20 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
             }
             show(results, 8, 8)
         }
+    }
+
+    /** Copy uses the same version, source set, configuration and recipe that Add would preselect. */
+    private fun copySelection(item: SearchResultItem): CopySelection? {
+        val version = item.defaultVersion ?: return null
+        val moduleSnapshot = snapshot?.modules?.firstOrNull { it.id == module.selectedItem }
+        val sourceSet = moduleSnapshot
+            ?.let { SourceSetRecommender().recommend(item.candidate, ModuleModel(it.id, it.sourceSets)).sourceSetName }
+            ?: "commonMain"
+        val recipe = service.recipes(item.candidate).firstOrNull()
+        return CopySelection(
+            item.candidate, version, sourceSet, recipe?.preferredConfiguration ?: "implementation", recipe,
+            kspTargets = moduleSnapshot?.sourceSetTargetNames?.get(sourceSet).orEmpty(),
+        )
     }
 
     override fun dispose() {
@@ -223,5 +314,6 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
 
     private companion object {
         val LOG = Logger.getInstance(SearchPanel::class.java)
+        const val TOOL_WINDOW_ID = "KMP Dependencies"
     }
 }

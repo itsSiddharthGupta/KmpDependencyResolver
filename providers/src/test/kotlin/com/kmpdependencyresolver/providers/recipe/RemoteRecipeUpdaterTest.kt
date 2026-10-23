@@ -55,7 +55,9 @@ class RemoteRecipeUpdaterTest {
         assertThat(fixture.updater.update(RemoteRecipeUpdater.MANIFEST_URI).updated).isFalse()
 
         fixture.transport.responses += fixture.manifestResponse(schemaVersion = 2)
-        assertThat(fixture.updater.update(RemoteRecipeUpdater.MANIFEST_URI).updated).isFalse()
+        val unsupported = fixture.updater.update(RemoteRecipeUpdater.MANIFEST_URI)
+        assertThat(unsupported.updated).isFalse()
+        assertThat(unsupported.failure).hasMessage("Unsupported manifest schema")
 
         fixture.transport.responses += fixture.manifestResponse(catalogUrl = "https://example.com/catalog.json")
         assertThat(fixture.updater.update(RemoteRecipeUpdater.MANIFEST_URI).updated).isFalse()
