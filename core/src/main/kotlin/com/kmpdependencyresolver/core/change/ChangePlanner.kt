@@ -21,7 +21,7 @@ class ChangePlanner(private val aliasGenerator: AliasGenerator = AliasGenerator(
         fun addLibrary(coordinates: Coordinates, version: String?, targetConfiguration: String, platform: Boolean): PlanConflict? {
             val sameCoordinate = project.catalog.libraries.entries.firstOrNull { it.value.coordinates == coordinates }
             if (sameCoordinate != null) {
-                val resolved = sameCoordinate.value.versionAlias?.let(project.catalog.versions::get)
+                val resolved = sameCoordinate.value.versionAlias?.let(project.catalog.versions::get) ?: sameCoordinate.value.version
                 if (version != null && resolved != version) {
                     return PlanConflict("VERSION_CONFLICT", "${coordinates.notation} already resolves to ${resolved ?: "no version"}; $version was requested.")
                 }

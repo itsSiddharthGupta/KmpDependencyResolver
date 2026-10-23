@@ -20,6 +20,7 @@ import com.kmpdependencyresolver.plugin.editing.ApplyRejectedException
 import com.kmpdependencyresolver.plugin.editing.ApplyResult
 import com.kmpdependencyresolver.plugin.editing.ChangePreview
 import com.kmpdependencyresolver.plugin.editing.PreviewException
+import com.kmpdependencyresolver.plugin.editing.RenderException
 import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
 import com.kmpdependencyresolver.plugin.project.AddCapability
 import java.awt.GridLayout
@@ -157,6 +158,9 @@ class AddDependencyFlow(
             val preview = backend.preview(plan, current.snapshot)
             AddPreviewState(current, options.copy(selectedCompanionIds = selected), preview, baseWarnings)
         } catch (exception: PreviewException) {
+            val error = UserFacingError.from(exception.code, exception)
+            AddPreviewState(current, options, null, baseWarnings + error.message, error, false)
+        } catch (exception: RenderException) {
             val error = UserFacingError.from(exception.code, exception)
             AddPreviewState(current, options, null, baseWarnings + error.message, error, false)
         } catch (exception: RuntimeException) {

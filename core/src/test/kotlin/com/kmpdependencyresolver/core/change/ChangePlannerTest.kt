@@ -44,6 +44,16 @@ class ChangePlannerTest {
     }
 
     @Test
+    fun `existing entry with a literal version is reused or reported as a conflict`() {
+        val literal = project(libraries = mapOf("ktor" to CatalogLibrary(Coordinates("io.ktor", "ktor-client-core"), null, "3.1.0")))
+
+        assertThat(ChangePlanner().plan(selection("io.ktor", "ktor-client-core", "3.1.0"), literal).plan!!.gradleOperations)
+            .containsExactly(GradleOperation.AddDependency("commonMain", "implementation", "ktor", false))
+        assertThat(ChangePlanner().plan(selection("io.ktor", "ktor-client-core", "3.2.0"), literal).conflicts)
+            .extracting<String> { it.code }.containsExactly("VERSION_CONFLICT")
+    }
+
+    @Test
     fun `alias ambiguity and unsupported configuration are conflicts`() {
         val collisions = project(libraries = mapOf(
             "library" to CatalogLibrary(Coordinates("one", "other"), null),

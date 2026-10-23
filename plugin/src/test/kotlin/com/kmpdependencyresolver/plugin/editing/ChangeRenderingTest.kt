@@ -83,5 +83,27 @@ kotlin {
         assertThat(PsiTreeUtil.findChildOfType(KtPsiFactory(project).createFile("build.gradle.kts", rendered), PsiErrorElement::class.java)).isNull()
     }
 
+    fun `test differing catalog entry under an existing key is an alias collision`() {
+        val original = "[versions]\nktor = \"3.0.0\"\n\n[libraries]\nktor-client-core = { module = \"io.ktor:ktor-client-core\", version.ref = \"ktor\" }\n"
+        val same = CatalogPlanRenderer().render(
+            original,
+            listOf(CatalogOperation.PutLibrary("ktor-client-core", Coordinates("io.ktor", "ktor-client-core"), "ktor")),
+        )
+
+        assertThat(same).isEqualTo(original)
+        val error = runCatching {
+            CatalogPlanRenderer().render(
+                original,
+                listOf(CatalogOperation.PutLibrary("ktor-client-core", Coordinates("org.other", "ktor-client-core"), "ktor")),
+            )
+        }.exceptionOrNull()
+        assertThat(error).isInstanceOf(RenderException::class.java)
+        assertThat((error as RenderException).code).isEqualTo("ALIAS_COLLISION")
+        val versionError = runCatching {
+            CatalogPlanRenderer().render(original, listOf(CatalogOperation.PutVersion("ktor", "3.1.0")))
+        }.exceptionOrNull() as? RenderException
+        assertThat(versionError?.code).isEqualTo("ALIAS_COLLISION")
+    }
+
     private fun fixture(name: String): String = Files.readString(Paths.get(testDataPath, "editing", name))
 }

@@ -1,6 +1,7 @@
 package com.kmpdependencyresolver.plugin.editing
 
 import com.kmpdependencyresolver.core.change.CatalogOperation
+import com.kmpdependencyresolver.core.change.VersionCatalogParser
 
 class CatalogPlanRenderer {
     fun render(original: String, operations: List<CatalogOperation>): String {
@@ -31,10 +32,28 @@ class CatalogPlanRenderer {
         val nextHeader = (header + 1 until lines.size).firstOrNull { lines[it].trim().startsWith("[") } ?: lines.size
         var insertion = nextHeader
         while (insertion > header + 1 && lines[insertion - 1].isBlank()) insertion--
-        val existingKeys = lines.subList(header + 1, nextHeader).mapNotNull {
-            Regex("^\\s*([A-Za-z0-9_.-]+)\\s*=").find(it)?.groupValues?.get(1)
-        }.toSet()
-        lines.addAll(insertion, additions.filter { line -> line.substringBefore('=').trim() !in existingKeys }.sorted())
+        val existing = parseTable(table, lines.subList(header + 1, nextHeader))
+        val fresh = additions.filter { line ->
+            val key = line.substringBefore('=').trim()
+            val current = existing[key] ?: return@filter true
+            // Re-adding an identical entry is a no-op; a different entry under the same key would be silently lost.
+            if (current != parseTable(table, listOf(line))[key]) {
+                throw RenderException("ALIAS_COLLISION", "[$table] already defines '$key' differently.")
+            }
+            false
+        }
+        lines.addAll(insertion, fresh.sorted())
         return lines
+    }
+
+    /** Parsed entries of one table, keyed by alias, so formatting differences do not count as conflicts. */
+    private fun parseTable(table: String, lines: List<String>): Map<String, Any> {
+        val catalog = VersionCatalogParser.parse("[$table]\n" + lines.joinToString("\n"))
+        return when (table) {
+            "versions" -> catalog.versions
+            "libraries" -> catalog.libraries
+            "plugins" -> catalog.plugins
+            else -> emptyMap()
+        }
     }
 }

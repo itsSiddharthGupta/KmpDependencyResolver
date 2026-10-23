@@ -16,8 +16,11 @@ sealed interface GradleOperation {
     data class AddPluginAlias(val alias: String, val applyFalse: Boolean) : GradleOperation
 }
 
-data class CatalogLibrary(val coordinates: Coordinates, val versionAlias: String?)
-data class CatalogPlugin(val pluginId: String, val versionAlias: String)
+/** A `[libraries]` entry; [version] holds a literal version when the entry does not use `version.ref`. */
+data class CatalogLibrary(val coordinates: Coordinates, val versionAlias: String?, val version: String? = null)
+
+/** A `[plugins]` entry; [version] holds a literal version when the entry does not use `version.ref`. */
+data class CatalogPlugin(val pluginId: String, val versionAlias: String?, val version: String? = null)
 data class CatalogState(
     val versions: Map<String, String>,
     val libraries: Map<String, CatalogLibrary>,
