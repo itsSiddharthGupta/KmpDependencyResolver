@@ -15,7 +15,6 @@ import com.intellij.openapi.Disposable
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
-import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.project.Project
@@ -284,9 +283,13 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
                 NotificationType.INFORMATION,
             )
         if (outcome.suggestGradleSync) {
-            notification.addAction(NotificationAction.createSimple("Sync Gradle project") {
-                ActionManager.getInstance().getAction("ExternalSystem.RefreshAllProjects")?.let { action ->
-                    ActionManager.getInstance().tryToExecute(action, null, this, null, true)
+            notification.addAction(NotificationAction.createSimpleExpiring("Sync Gradle project") {
+                if (!GradleSyncTrigger(project).sync()) {
+                    Messages.showWarningDialog(
+                        project,
+                        "Gradle sync could not be started automatically. Use File | Sync Project with Gradle Files.",
+                        "Sync Gradle project",
+                    )
                 }
             })
         }
