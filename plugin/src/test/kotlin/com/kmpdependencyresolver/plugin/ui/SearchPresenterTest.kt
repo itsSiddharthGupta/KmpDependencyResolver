@@ -48,6 +48,40 @@ class SearchPresenterTest {
     }
 
     @Test
+    fun `gateway exception ends searching and is shown as a message`() {
+        val tasks = ManualTasks()
+        val states = mutableListOf<SearchUiState>()
+        val presenter = SearchPresenter(
+            DependencySearchGateway { throw java.util.concurrent.RejectedExecutionException("coordinator closed") },
+            tasks, tasks, tasks, { ":shared" }, states::add,
+        )
+
+        presenter.onQueryChanged("ktor", emptySet(), false)
+        tasks.runLatest(); tasks.runLatest(); tasks.runLatest()
+
+        assertThat(states.last().searching).isFalse()
+        assertThat(states.last().providerMessages).containsExactly("search: coordinator closed")
+    }
+
+    @Test
+    fun `exact coordinate match is listed first within its section`() {
+        val tasks = ManualTasks()
+        val states = mutableListOf<SearchUiState>()
+        val exact = candidate("ktor-client-core", EvidenceKind.UNKNOWN, emptySet(), "io.ktor")
+        val sibling = candidate("ktor-client-cio", EvidenceKind.VERIFIED, setOf(TargetFamily.JVM), "io.ktor")
+        val presenter = SearchPresenter(
+            DependencySearchGateway { AggregatedSearchResult(listOf(sibling, exact), emptyList()) },
+            tasks, tasks, tasks, { ":shared" }, states::add,
+        )
+
+        presenter.onQueryChanged("io.ktor:ktor-client-core", emptySet(), false)
+        tasks.runLatest(); tasks.runLatest(); tasks.runLatest()
+
+        assertThat(states.last().results).extracting<String> { it.candidate.coordinates.notation }
+            .containsExactly("io.ktor:ktor-client-core", "io.ktor:ktor-client-cio")
+    }
+
+    @Test
     fun `add resolves a visible candidate and active module`() {
         val tasks = ManualTasks()
         val additions = mutableListOf<Pair<Candidate, String?>>()

@@ -49,6 +49,7 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
     private val transport = JdkHttpTransport()
     private val cache = FileSearchCache(Path.of(PathManager.getSystemPath(), "kmp-dependency-resolver", "cache"))
     private val settings = service<ResolverSettings>()
+    private val coordinatorLock = Any()
     private var providerConfiguration = currentProviderConfiguration()
     private var coordinator = createCoordinator(providerConfiguration)
     private val modelReader = JetBrainsProjectModelReader()
@@ -78,15 +79,20 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
         }
     }
 
-    @Synchronized
-    fun search(request: SearchRequest): AggregatedSearchResult {
+    /**
+     * Not synchronized as a whole: a slow provider must not block the next query. Only the swap of
+     * the coordinator after a settings change is guarded; the search itself runs outside the lock.
+     */
+    fun search(request: SearchRequest): AggregatedSearchResult = currentCoordinator().search(request)
+
+    private fun currentCoordinator(): ProviderSearchCoordinator = synchronized(coordinatorLock) {
         val configuration = currentProviderConfiguration()
         if (configuration != providerConfiguration) {
             coordinator.close()
             providerConfiguration = configuration
             coordinator = createCoordinator(configuration)
         }
-        return coordinator.search(request)
+        coordinator
     }
     fun projectSnapshot(): ProjectSnapshot = modelReader.read(project)
     override fun snapshot(): ProjectSnapshot = projectSnapshot()
@@ -113,9 +119,8 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             ?: snapshot.modules.firstOrNull()?.id
     }
 
-    @Synchronized
     override fun dispose() {
-        coordinator.close()
+        synchronized(coordinatorLock) { coordinator.close() }
         recipeUpdaterExecutor.shutdownNow()
     }
 
