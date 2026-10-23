@@ -61,5 +61,27 @@ kotlin {
         assertThat(PsiTreeUtil.findChildOfType(KtPsiFactory(project).createFile("build.gradle.kts", rendered), PsiErrorElement::class.java)).isNull()
     }
 
+    fun `test creates a missing source set dependency block inside sourceSets`() {
+        val original = """plugins {
+}
+kotlin {
+    sourceSets {
+        androidMain.dependencies {
+            implementation(libs.androidx.core)
+        }
+    }
+}
+"""
+
+        val rendered = KotlinDslPlanRenderer().render(
+            original,
+            listOf(GradleOperation.AddDependency("commonMain", "implementation", "ktor-client-core", false)),
+        )
+
+        assertThat(rendered).contains("commonMain.dependencies {")
+        assertThat(rendered).contains("implementation(libs.ktor.client.core)")
+        assertThat(PsiTreeUtil.findChildOfType(KtPsiFactory(project).createFile("build.gradle.kts", rendered), PsiErrorElement::class.java)).isNull()
+    }
+
     private fun fixture(name: String): String = Files.readString(Paths.get(testDataPath, "editing", name))
 }

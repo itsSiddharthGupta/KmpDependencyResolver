@@ -76,6 +76,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
             activeModule = { service.activeModuleId() }, onState = ::render,
             onAdd = ::addDependency,
         )
+        module.addActionListener { search() }
 
         val filters = JPanel().apply { add(module); add(target); add(previews) }
         val north = JPanel(BorderLayout()).apply { add(query, BorderLayout.NORTH); add(filters, BorderLayout.CENTER); add(status, BorderLayout.SOUTH) }
@@ -137,7 +138,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     }
 
     private fun addSelectedDependency() {
-        results.selectedValue?.candidate?.coordinates?.notation?.let(presenter::add)
+        results.selectedValue?.candidate?.let { addDependency(it, module.selectedItem as? String) }
     }
 
     private fun addDependency(candidate: com.kmpdependencyresolver.core.model.Candidate, moduleId: String?) {

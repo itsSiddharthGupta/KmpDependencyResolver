@@ -11,6 +11,7 @@ data class UserFacingError(
             return when (code) {
                 "UNSUPPORTED_PROJECT" -> UserFacingError(code, "Project not supported", "Add requires a Kotlin DSL module and gradle/libs.versions.toml.")
                 "AMBIGUOUS_SOURCE_SETS" -> UserFacingError(code, "Choose a source set", "The source-set model is ambiguous. Choose one of the listed source sets.")
+                "SOURCE_SET_NOT_FOUND" -> UserFacingError(code, "Source set cannot be edited", "The selected module does not expose a writable source-set block. Choose another module or use Copy.")
                 "CATALOG_CONFLICT", "ALIAS_COLLISION" -> UserFacingError("CATALOG_CONFLICT", "Catalog conflict", "Choose a different alias or resolve the existing version-catalog entry.")
                 "VERSION_CONFLICT" -> UserFacingError(code, "Version conflict", "A different version is already catalogued. Choose that version or update the catalog first.")
                 "READ_ONLY" -> UserFacingError(code, "File is read-only", "Make the catalog and build file writable, then preview again.")

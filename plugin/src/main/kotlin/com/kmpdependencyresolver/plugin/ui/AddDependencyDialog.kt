@@ -232,6 +232,7 @@ class AddDependencyDialog(project: Project, private val state: ConfirmationState
     override fun createCenterPanel(): JComponent = JPanel(GridLayout(0, 1, 0, JBUI.scale(6))).apply {
         state.notice?.let { add(JBLabel(it)) }
         add(JBLabel(state.recommendation.explanation))
+        add(labeled("Module", JBLabel(state.moduleId)))
         add(labeled("Version", version))
         add(labeled("Source set", sourceSet))
         add(labeled("Configuration", configuration))

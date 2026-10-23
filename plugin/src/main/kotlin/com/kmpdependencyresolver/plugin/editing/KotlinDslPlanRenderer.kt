@@ -26,12 +26,22 @@ class KotlinDslPlanRenderer {
         if (direct >= 0) return insertAtBlock(text, text.indexOf('{', direct), expression)
 
         val sourceIndex = Regex("(?:val\\s+)?$sourceSet(?:\\s+by\\s+(?:getting|creating))?\\s*\\{").find(text)?.range?.first
-            ?: throw RenderException("SOURCE_SET_NOT_FOUND", "Could not locate $sourceSet in Kotlin DSL.")
+            ?: return insertMissingSourceSet(text, sourceSet, expression)
         val sourceBrace = text.indexOf('{', sourceIndex)
         val closing = matchingBrace(text, sourceBrace)
         val indent = lineIndent(text, sourceBrace) + "    "
         val block = "\n${indent}dependencies {\n${indent}    $expression\n$indent}"
         return text.substring(0, closing) + block + text.substring(closing)
+    }
+
+    private fun insertMissingSourceSet(text: String, sourceSet: String, expression: String): String {
+        val marker = Regex("\\bsourceSets\\s*\\{").find(text)
+            ?: throw RenderException("SOURCE_SET_NOT_FOUND", "Could not locate $sourceSet or sourceSets in Kotlin DSL.")
+        val openingBrace = text.indexOf('{', marker.range.first)
+        val baseIndent = lineIndent(text, openingBrace)
+        val indent = "$baseIndent    "
+        val block = "$sourceSet.dependencies {\n$indent    $expression\n$indent}"
+        return insertAtBlock(text, openingBrace, block)
     }
 
     private fun insertIntoBlock(text: String, blockName: String, expression: String): String {

@@ -133,13 +133,21 @@ class AddDependencyFlowTest {
     fun `stable error mapper covers supported diagnostics without leaking exception detail`() {
         val codes = listOf(
             "UNSUPPORTED_PROJECT", "AMBIGUOUS_SOURCE_SETS", "CATALOG_CONFLICT", "VERSION_CONFLICT",
-            "READ_ONLY", "INVALID_RENDER", "STALE_STATE", "PROVIDER_UNAVAILABLE", "CACHE_CORRUPT", "UNEXPECTED",
+            "SOURCE_SET_NOT_FOUND", "READ_ONLY", "INVALID_RENDER", "STALE_STATE", "PROVIDER_UNAVAILABLE", "CACHE_CORRUPT", "UNEXPECTED",
         )
 
         assertThat(codes.map { UserFacingError.from(it, IllegalStateException("secret file contents")) }.map { it.code })
             .containsExactlyElementsOf(codes)
         assertThat(codes.map { UserFacingError.from(it, IllegalStateException("secret file contents")) })
             .allMatch { "secret file contents" !in it.message }
+    }
+
+    @Test
+    fun `missing source set diagnostic tells the user to choose another module or copy`() {
+        val error = UserFacingError.from("SOURCE_SET_NOT_FOUND")
+
+        assertThat(error.title).isEqualTo("Source set cannot be edited")
+        assertThat(error.message).contains("another module", "Copy")
     }
 
     private fun ConfirmationState.toOptions(
