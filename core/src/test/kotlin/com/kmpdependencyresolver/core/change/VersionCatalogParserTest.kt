@@ -86,7 +86,7 @@ class VersionCatalogParserTest {
         val catalog = VersionCatalogParser.parse(
             """
             [versions]
-            broken = 
+            broken =
             good = "1.0"
             [libraries]
             bad-notation = "not-a-coordinate"
