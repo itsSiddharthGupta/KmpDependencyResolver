@@ -20,7 +20,8 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.project.Project
 import com.intellij.ui.SearchTextField
-import com.intellij.ui.SimpleListCellRenderer
+import com.intellij.ui.ColoredListCellRenderer
+import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
@@ -43,6 +44,7 @@ import javax.swing.DefaultListModel
 import javax.swing.JCheckBox
 import javax.swing.JButton
 import javax.swing.JComboBox
+import javax.swing.JList
 import javax.swing.JMenuItem
 import javax.swing.JPanel
 import javax.swing.JPopupMenu
@@ -74,8 +76,11 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         results.accessibleContext.accessibleName = "Dependency results"
         results.cellRenderer = ResultCellRenderer()
         // Modules Add can't edit (plain JVM/Android, Groovy, …) stay selectable for Copy but say so up front.
-        module.renderer = SimpleListCellRenderer.create { label, value: String?, _ ->
-            label.text = value.orEmpty() + if (value != null && snapshot?.addUnavailableReason(value) != null) "  (Copy only)" else ""
+        module.renderer = object : ColoredListCellRenderer<String>() {
+            override fun customizeCellRenderer(list: JList<out String>, value: String?, index: Int, selected: Boolean, hasFocus: Boolean) {
+                append(value.orEmpty())
+                if (value != null && snapshot?.addUnavailableReason(value) != null) append("  (Copy only)", SimpleTextAttributes.GRAYED_ATTRIBUTES)
+            }
         }
         previews.isSelected = ApplicationManager.getApplication().service<ResolverSettings>().state.includePreReleases
 
