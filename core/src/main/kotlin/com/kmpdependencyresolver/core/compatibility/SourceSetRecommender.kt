@@ -24,6 +24,7 @@ class SourceSetRecommender {
             .filter { candidate.supportedTargets.containsAll(it.descendantTargets) }
             .sortedWith(
                 compareByDescending<SourceSetNode> { it.descendantTargets.size }
+                    .thenBy { it.name.endsWith("Test") }
                     .thenBy { distanceFromRoot(it, nodesByName, emptySet()) }
                     .thenBy(SourceSetNode::name),
             )

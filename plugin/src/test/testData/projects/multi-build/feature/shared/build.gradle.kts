@@ -1,0 +1,4 @@
+kotlin {
+    jvm()
+    iosArm64()
+}

@@ -47,4 +47,34 @@ class ProjectModelReaderTest : BasePlatformTestCase() {
         assertThat(snapshot.addCapability(":app")).isEqualTo(AddCapability.COPY_ONLY)
         assertThat(module.copyOnlyReasons).containsExactly("Groovy build scripts are not safely editable; Kotlin DSL is required.")
     }
+
+    fun `test nested project paths skip buildSrc and included builds and read the catalog`() {
+        myFixture.copyDirectoryToProject("projects/multi-build", "")
+
+        val snapshot = JetBrainsProjectModelReader().read(project)
+
+        assertThat(snapshot.modules.map { it.id }).containsExactly(":", ":feature:shared")
+        assertThat(snapshot.addCapability(":")).isEqualTo(AddCapability.COPY_ONLY)
+        assertThat(snapshot.addCapability(":feature:shared")).isEqualTo(AddCapability.APPLY)
+        assertThat(snapshot.existingAliases).containsExactly("ktor")
+        assertThat(snapshot.versions).containsEntry("kotlin", "2.2.0")
+    }
+
+    fun `test unsaved build script edits are part of the model`() {
+        myFixture.copyDirectoryToProject("projects/multi-build", "")
+        val buildFile = myFixture.findFileInTempDir("feature/shared/build.gradle.kts")
+        val document = com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getDocument(buildFile)!!
+        com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
+            document.setText("kotlin {\n    jvm()\n    iosArm64()\n    wasmJs()\n}\n")
+        }
+
+        val module = JetBrainsProjectModelReader().read(project).modules.single { it.id == ":feature:shared" }
+
+        assertThat(module.targets).contains(TargetFamily.WASM)
+    }
+
+    fun `test gradle path is relative to the build root`() {
+        assertThat(JetBrainsProjectModelReader.gradlePath("/work/app", "/work/app")).isEqualTo(":")
+        assertThat(JetBrainsProjectModelReader.gradlePath("/work/app/", "/work/app/feature/shared")).isEqualTo(":feature:shared")
+    }
 }

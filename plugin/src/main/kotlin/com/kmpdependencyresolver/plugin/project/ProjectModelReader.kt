@@ -26,6 +26,23 @@ data class ProjectSnapshot(
     fun addCapability(moduleId: String): AddCapability =
         if (modules.firstOrNull { it.id == moduleId }?.copyOnlyReasons.isNullOrEmpty()) AddCapability.APPLY
         else AddCapability.COPY_ONLY
+
+    /** The module whose project directory is the nearest ancestor of [filePath]. */
+    fun moduleContaining(filePath: String): GradleModuleSnapshot? {
+        val normalized = filePath.replace('\\', '/')
+        return modules
+            .filter { module ->
+                val dir = module.buildFile.replace('\\', '/').substringBeforeLast('/')
+                normalized == dir || normalized.startsWith("$dir/")
+            }
+            .maxByOrNull { it.buildFile.length }
+    }
+
+    /** The module to preselect: the one containing [filePath], else the first module Add can edit. */
+    fun defaultModuleId(filePath: String?): String? =
+        filePath?.let(::moduleContaining)?.id
+            ?: modules.firstOrNull { addCapability(it.id) == AddCapability.APPLY }?.id
+            ?: modules.firstOrNull()?.id
 }
 
 fun interface ProjectModelReader {

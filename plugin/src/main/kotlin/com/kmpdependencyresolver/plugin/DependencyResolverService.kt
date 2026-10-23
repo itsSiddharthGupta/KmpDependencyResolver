@@ -5,20 +5,18 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.module.ModuleUtilCore
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtilCore
-import com.kmpdependencyresolver.core.change.CatalogLibrary
-import com.kmpdependencyresolver.core.change.CatalogPlugin
-import com.kmpdependencyresolver.core.change.CatalogState
 import com.kmpdependencyresolver.core.change.ChangePlan
 import com.kmpdependencyresolver.core.change.ChangePlanner
 import com.kmpdependencyresolver.core.change.ChangeProjectSnapshot
 import com.kmpdependencyresolver.core.change.DependencySelection
 import com.kmpdependencyresolver.core.change.PlanResult
+import com.kmpdependencyresolver.core.change.VersionCatalogParser
 import com.kmpdependencyresolver.core.model.Candidate
-import com.kmpdependencyresolver.core.model.Coordinates
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
 import com.kmpdependencyresolver.core.search.SearchRequest
 import com.kmpdependencyresolver.plugin.editing.ApplyResult
@@ -108,16 +106,14 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             ?: error("Module $moduleId is unavailable")
         val catalogText = snapshot.catalogPath
             ?.let { LocalFileSystem.getInstance().refreshAndFindFileByPath(it) }
-            ?.let(VfsUtilCore::loadText).orEmpty()
-        return ChangeProjectSnapshot(moduleId, parseCatalog(catalogText), module.configurations)
+            ?.let { file -> ReadAction.compute<String, RuntimeException> { FileDocumentManager.getInstance().getCachedDocument(file)?.text ?: VfsUtilCore.loadText(file) } }
+            .orEmpty()
+        return ChangeProjectSnapshot(moduleId, VersionCatalogParser.parse(catalogText).toState(), module.configurations)
     }
 
-    fun activeModuleId(snapshot: ProjectSnapshot = projectSnapshot()): String? {
-        val selected = FileEditorManager.getInstance(project).selectedFiles.firstOrNull() ?: return snapshot.modules.firstOrNull()?.id
-        val moduleName = ModuleUtilCore.findModuleForFile(selected, project)?.name ?: return snapshot.modules.firstOrNull()?.id
-        return snapshot.modules.firstOrNull { it.id.substringAfterLast(':') == moduleName || it.id == moduleName }?.id
-            ?: snapshot.modules.firstOrNull()?.id
-    }
+    /** Matches the selected editor file to the module whose directory contains it, not by IntelliJ module name. */
+    fun activeModuleId(snapshot: ProjectSnapshot = projectSnapshot()): String? =
+        snapshot.defaultModuleId(FileEditorManager.getInstance(project).selectedFiles.firstOrNull()?.path)
 
     override fun dispose() {
         synchronized(coordinatorLock) { coordinator.close() }
@@ -136,30 +132,6 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             if ("google-maven" in configuration.ids) add(GoogleMavenProvider(transport, cache, mode = configuration.mode))
         },
     )
-
-    private fun parseCatalog(text: String): CatalogState {
-        fun section(name: String) = text.substringAfter("[$name]", "").substringBefore("\n[")
-        val versions = ENTRY.findAll(section("versions")).associate { it.groupValues[1] to it.groupValues[2] }
-        val libraries = TABLE_ENTRY.findAll(section("libraries")).mapNotNull { match ->
-            val notation = stringField("module").find(match.groupValues[2])?.groupValues?.get(1) ?: return@mapNotNull null
-            match.groupValues[1] to CatalogLibrary(
-                Coordinates(notation.substringBefore(':'), notation.substringAfter(':')),
-                stringField("version.ref").find(match.groupValues[2])?.groupValues?.get(1),
-            )
-        }.toMap()
-        val plugins = TABLE_ENTRY.findAll(section("plugins")).mapNotNull { match ->
-            val id = stringField("id").find(match.groupValues[2])?.groupValues?.get(1) ?: return@mapNotNull null
-            val version = stringField("version.ref").find(match.groupValues[2])?.groupValues?.get(1) ?: return@mapNotNull null
-            match.groupValues[1] to CatalogPlugin(id, version)
-        }.toMap()
-        return CatalogState(versions, libraries, plugins)
-    }
-
-    private companion object {
-        val ENTRY = Regex("(?m)^([A-Za-z0-9_.-]+)\\s*=\\s*\"([^\"]*)\"")
-        val TABLE_ENTRY = Regex("(?m)^([A-Za-z0-9_.-]+)\\s*=\\s*\\{([^}]*)}")
-        fun stringField(name: String) = Regex("(?:^|[,\\s])${Regex.escape(name)}\\s*=\\s*\"([^\"]+)\"")
-    }
 
     private data class ProviderConfiguration(val ids: List<String>, val mode: ProviderMode)
 }
