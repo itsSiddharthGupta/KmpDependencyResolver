@@ -21,8 +21,11 @@ interface HttpTransport {
     fun execute(request: HttpRequestSpec): HttpPayload
 }
 
-class HttpTransportException(
+open class HttpTransportException(
     val code: String,
     message: String,
     cause: Throwable? = null,
 ) : IllegalStateException(message, cause)
+
+/** A non-2xx response. Callers that probe optional files (such as `.module`) treat 404 as "absent". */
+class HttpStatusException(val status: Int, message: String) : HttpTransportException("HTTP_STATUS", message)

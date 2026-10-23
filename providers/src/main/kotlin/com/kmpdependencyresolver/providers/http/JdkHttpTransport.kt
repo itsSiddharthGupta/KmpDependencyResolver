@@ -41,13 +41,21 @@ class JdkHttpTransport(
         } catch (exception: InterruptedException) {
             Thread.currentThread().interrupt()
             throw HttpTransportException("REQUEST_CANCELLED", "HTTP request was cancelled.", exception)
+        } catch (exception: java.net.http.HttpTimeoutException) {
+            throw HttpTransportException("REQUEST_TIMEOUT", "${request.uri.host} did not respond in time.", exception)
+        } catch (exception: java.net.ConnectException) {
+            throw HttpTransportException("REQUEST_FAILED", "Could not connect to ${request.uri.host}.", exception)
         } catch (exception: Exception) {
-            throw HttpTransportException("REQUEST_FAILED", "HTTP request failed.", exception)
+            throw HttpTransportException("REQUEST_FAILED", "HTTP request to ${request.uri.host} failed.", exception)
         }
 
         if (response.statusCode() in 300..399) {
             response.body().close()
             throw HttpTransportException("REDIRECT_REJECTED", "HTTP redirects are not followed.")
+        }
+        if (response.statusCode() !in 200..299) {
+            response.body().close()
+            throw HttpStatusException(response.statusCode(), "${request.uri.host} returned HTTP ${response.statusCode()}.")
         }
 
         val contentType = response.headers().firstValue("content-type").orElse("")

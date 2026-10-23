@@ -24,4 +24,7 @@ data class ProviderResult(
 
 fun interface SearchProvider {
     fun search(request: SearchRequest): ProviderResult
+
+    /** Stable identifier used when the coordinator has to report a failure on the provider's behalf. */
+    val id: String get() = javaClass.simpleName
 }

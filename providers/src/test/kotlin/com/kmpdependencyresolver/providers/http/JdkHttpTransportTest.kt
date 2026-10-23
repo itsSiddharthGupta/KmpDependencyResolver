@@ -75,6 +75,28 @@ class JdkHttpTransportTest {
         assertCode("PAYLOAD_TOO_LARGE", request, response(body = "12345".encodeToByteArray()))
     }
 
+    @Test
+    fun `non success status is reported with the host instead of being parsed as data`() {
+        val request = HttpRequestSpec(URI("https://search.maven.org/solrsearch/select"), expectedContentTypes = setOf("application/json"))
+        val transport = JdkHttpTransport(sender = HttpSender { _, _ -> response(status = 400, headers = mapOf("content-type" to listOf("text/plain"))) })
+
+        assertThatThrownBy { transport.execute(request) }
+            .isInstanceOf(HttpStatusException::class.java)
+            .hasMessage("search.maven.org returned HTTP 400.")
+            .extracting("status").isEqualTo(400)
+    }
+
+    @Test
+    fun `timeouts name the unresponsive host`() {
+        val request = HttpRequestSpec(URI("https://api.klibs.io/mcp"), expectedContentTypes = setOf("application/json"))
+        val transport = JdkHttpTransport(sender = HttpSender { _, _ -> throw java.net.http.HttpTimeoutException("request timed out") })
+
+        assertThatThrownBy { transport.execute(request) }
+            .isInstanceOf(HttpTransportException::class.java)
+            .hasMessage("api.klibs.io did not respond in time.")
+            .extracting("code").isEqualTo("REQUEST_TIMEOUT")
+    }
+
     private fun assertCode(code: String, request: HttpRequestSpec, response: HttpResponse<ByteArrayInputStream>) {
         val transport = JdkHttpTransport(sender = HttpSender { _, _ -> response })
         assertThatThrownBy { transport.execute(request) }
