@@ -213,7 +213,7 @@ class AddDependencyFlowTest {
             listOf(
                 file("/project/gradle/libs.versions.toml", PreviewFileKind.VERSION_CATALOG),
                 file("/project/shared/build.gradle.kts", PreviewFileKind.KOTLIN_DSL),
-            ), "diff",
+            ),
         )
         override fun apply(preview: ChangePreview): ApplyResult {
             applyFailure?.let { throw it }

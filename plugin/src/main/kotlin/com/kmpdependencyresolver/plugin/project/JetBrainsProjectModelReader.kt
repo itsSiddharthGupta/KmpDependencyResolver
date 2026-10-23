@@ -32,7 +32,10 @@ class JetBrainsProjectModelReader(
             if (buildFile.extension == "kts") {
                 val ktFile = KtPsiFactory(project, markGenerated = false).createFile(buildFile.name, textOf(buildFile))
                 val result = inspector.inspect(ktFile)
-                GradleModuleSnapshot(id, buildFile.path, result.targets, result.sourceSets, result.pluginAliases, result.configurations, result.copyOnlyReasons)
+                GradleModuleSnapshot(
+                    id, buildFile.path, result.targets, result.sourceSets, result.pluginAliases, result.configurations,
+                    result.copyOnlyReasons, result.sourceSetTargetNames,
+                )
             } else {
                 GradleModuleSnapshot(
                     id, buildFile.path, emptySet(), emptyList(), emptySet(), emptySet(),

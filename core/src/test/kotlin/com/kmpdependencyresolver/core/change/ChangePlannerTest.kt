@@ -6,6 +6,7 @@ import com.kmpdependencyresolver.core.model.DependencyVersion
 import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.PlacementRecommendation
 import com.kmpdependencyresolver.core.model.Provenance
+import com.kmpdependencyresolver.core.model.TargetFamily
 import com.kmpdependencyresolver.core.recipe.BomRule
 import com.kmpdependencyresolver.core.recipe.CompanionPlugin
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
@@ -96,6 +97,51 @@ class ChangePlannerTest {
             GradleOperation.AddPluginAlias("ksp", false),
             GradleOperation.AddDependency("commonMain", "ksp", "room-compiler", false),
         )
+    }
+
+    @Test
+    fun `KMP Room recipe adds the compiler to every target KSP configuration`() {
+        val recipe = recipe(
+            plugins = listOf(CompanionPlugin("ksp", "com.google.devtools.ksp", true)),
+            processors = listOf(ProcessorRequirement(Coordinates("androidx.room", "room-compiler"), "ksp", true)),
+        )
+        val project = project(
+            plugins = mapOf("ksp" to CatalogPlugin("com.google.devtools.ksp", "kspVersion")),
+        ).copy(sourceSetTargetNames = mapOf("commonMain" to listOf("android", "iosArm64", "desktop")))
+
+        val result = ChangePlanner().plan(selection("androidx.room", "room-runtime", "2.7.0", recipe), project)
+
+        assertThat(result.conflicts).isEmpty()
+        assertThat(result.plan!!.gradleOperations).containsExactly(
+            GradleOperation.AddRootPluginAlias("ksp"),
+            GradleOperation.AddPluginAlias("ksp", false),
+            GradleOperation.AddDependency("commonMain", "implementation", "room-runtime", false),
+            GradleOperation.AddTopLevelDependency("kspAndroid", "room-compiler"),
+            GradleOperation.AddTopLevelDependency("kspDesktop", "room-compiler"),
+            GradleOperation.AddTopLevelDependency("kspIosArm64", "room-compiler"),
+        )
+        assertThat(result.plan!!.catalogOperations.filterIsInstance<CatalogOperation.PutLibrary>()).extracting<String> { it.alias }
+            .containsExactlyInAnyOrder("room-runtime", "room-compiler")
+    }
+
+    @Test
+    fun `BOM is rejected in a source set that compiles non JVM targets`() {
+        val recipe = recipe(bom = BomRule(Coordinates("androidx.compose", "compose-bom")))
+        val project = project().copy(
+            sourceSetTargets = mapOf(
+                "commonMain" to setOf(TargetFamily.ANDROID, TargetFamily.IOS),
+                "androidMain" to setOf(TargetFamily.ANDROID),
+            ),
+        )
+
+        val common = ChangePlanner().plan(selection("androidx.compose.ui", "ui", "2025.01.00", recipe), project)
+        val android = ChangePlanner().plan(
+            selection("androidx.compose.ui", "ui", "2025.01.00", recipe).copy(overrideSourceSet = "androidMain"),
+            project,
+        )
+
+        assertThat(common.conflicts).extracting<String> { it.code }.containsExactly("BOM_REQUIRES_JVM_SOURCE_SET")
+        assertThat(android.plan!!.gradleOperations).contains(GradleOperation.AddDependency("androidMain", "implementation", "compose-bom", true))
     }
 
     @Test

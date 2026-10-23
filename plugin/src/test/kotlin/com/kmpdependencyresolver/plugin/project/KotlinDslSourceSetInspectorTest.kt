@@ -35,6 +35,8 @@ class KotlinDslSourceSetInspectorTest : BasePlatformTestCase() {
         assertThat(byName["commonTest"]!!.descendantTargets).hasSize(4)
         assertThat(byName["iosTest"]!!.dependsOn).containsExactly("appleTest")
         assertThat(byName).doesNotContainKey("androidTest")
+        assertThat(result.sourceSetTargetNames["commonMain"]).containsExactly("android", "iosArm64", "iosSimulatorArm64", "linuxX64", "macosArm64")
+        assertThat(result.sourceSetTargetNames["iosMain"]).containsExactly("iosArm64", "iosSimulatorArm64")
     }
 
     fun `test named target uses its custom source set name`() {

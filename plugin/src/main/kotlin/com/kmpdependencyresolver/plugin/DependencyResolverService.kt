@@ -108,7 +108,11 @@ class DependencyResolverService(private val project: Project) : Disposable, AddD
             ?.let { LocalFileSystem.getInstance().refreshAndFindFileByPath(it) }
             ?.let { file -> ReadAction.compute<String, RuntimeException> { FileDocumentManager.getInstance().getCachedDocument(file)?.text ?: VfsUtilCore.loadText(file) } }
             .orEmpty()
-        return ChangeProjectSnapshot(moduleId, VersionCatalogParser.parse(catalogText).toState(), module.configurations)
+        return ChangeProjectSnapshot(
+            moduleId, VersionCatalogParser.parse(catalogText).toState(), module.configurations,
+            sourceSetTargets = module.sourceSets.associate { it.name to it.descendantTargets },
+            sourceSetTargetNames = module.sourceSetTargetNames,
+        )
     }
 
     /** Matches the selected editor file to the module whose directory contains it, not by IntelliJ module name. */

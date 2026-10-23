@@ -105,5 +105,132 @@ kotlin {
         assertThat(versionError?.code).isEqualTo("ALIAS_COLLISION")
     }
 
+    fun `test KMP KSP processors go into a top level dependencies block per target`() {
+        val original = """plugins {
+    alias(libs.plugins.kotlin.multiplatform)
+}
+kotlin {
+    androidTarget()
+    iosArm64()
+    sourceSets {
+        commonMain.dependencies {
+        }
+    }
+}
+"""
+        val rendered = KotlinDslPlanRenderer().render(
+            original,
+            listOf(
+                GradleOperation.AddPluginAlias("ksp", false),
+                GradleOperation.AddDependency("commonMain", "implementation", "room-runtime", false),
+                GradleOperation.AddTopLevelDependency("kspAndroid", "room-compiler"),
+                GradleOperation.AddTopLevelDependency("kspIosArm64", "room-compiler"),
+            ),
+        )
+
+        assertThat(rendered).endsWith("""
+}
+
+dependencies {
+    add("kspAndroid", libs.room.compiler)
+    add("kspIosArm64", libs.room.compiler)
+}
+""")
+        assertThat(rendered).contains("        commonMain.dependencies {\n            implementation(libs.room.runtime)\n        }")
+        assertThat(rendered).doesNotContain("ksp(libs")
+        assertThat(KotlinDslPlanRenderer().render(rendered, listOf(GradleOperation.AddTopLevelDependency("kspAndroid", "room-compiler"))))
+            .isEqualTo(rendered)
+        assertThat(PsiTreeUtil.findChildOfType(KtPsiFactory(project).createFile("build.gradle.kts", rendered), PsiErrorElement::class.java)).isNull()
+    }
+
+    fun `test existing top level dependencies block is reused and nested ones are ignored`() {
+        val original = """kotlin {
+    sourceSets {
+        commonMain.dependencies {
+        }
+    }
+}
+
+dependencies {
+    debugImplementation(libs.leakcanary)
+}
+"""
+        val rendered = KotlinDslPlanRenderer().render(original, listOf(GradleOperation.AddTopLevelDependency("kspAndroid", "room-compiler")))
+
+        assertThat(rendered).isEqualTo("""kotlin {
+    sourceSets {
+        commonMain.dependencies {
+        }
+    }
+}
+
+dependencies {
+    debugImplementation(libs.leakcanary)
+    add("kspAndroid", libs.room.compiler)
+}
+""")
+    }
+
+    fun `test braces and declarations in comments and literals are ignored`() {
+        val original = """kotlin {
+    sourceSets {
+        // commonMain.dependencies { implementation(libs.ktor.client.core) }
+        /* androidMain.dependencies {
+           implementation(libs.ktor.client.core) */
+        val label = "{ not a block"
+        val raw = ${"\"\"\""}{ { ${"\"\"\""}
+        val brace = '{'
+        commonMain.dependencies {
+        }
+    }
+}
+"""
+        val rendered = KotlinDslPlanRenderer().render(
+            original,
+            listOf(GradleOperation.AddDependency("commonMain", "implementation", "ktor-client-core", false)),
+        )
+
+        assertThat(rendered).contains("        commonMain.dependencies {\n            implementation(libs.ktor.client.core)\n        }")
+        assertThat(rendered.lines().count { it.contains("implementation(libs.ktor.client.core)") }).isEqualTo(3)
+    }
+
+    fun `test source set names use word boundaries and duplicates are per source set`() {
+        val original = """kotlin {
+    sourceSets {
+        iosArm64Main.dependencies {
+            implementation(libs.ktor.client.core)
+        }
+        armMain.dependencies {
+        }
+    }
+}
+"""
+        val rendered = KotlinDslPlanRenderer().render(
+            original,
+            listOf(GradleOperation.AddDependency("armMain", "implementation", "ktor-client-core", false)),
+        )
+
+        assertThat(rendered).contains("        armMain.dependencies {\n            implementation(libs.ktor.client.core)\n        }")
+        assertThat(rendered).contains("        iosArm64Main.dependencies {\n            implementation(libs.ktor.client.core)\n        }")
+    }
+
+    fun `test root companion plugin alias is added with apply false only when a plugins block exists`() {
+        val root = """plugins {
+    alias(libs.plugins.kotlin.multiplatform) apply false
+}
+"""
+        val renderer = KotlinDslPlanRenderer()
+
+        assertThat(renderer.renderRoot(root, listOf(GradleOperation.AddRootPluginAlias("ksp"))))
+            .isEqualTo("""plugins {
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.ksp) apply false
+}
+""")
+        val already = "plugins {\n    alias(libs.plugins.ksp) apply false\n}\n"
+        assertThat(renderer.renderRoot(already, listOf(GradleOperation.AddRootPluginAlias("ksp")))).isEqualTo(already)
+        assertThat(renderer.renderRoot("allprojects { }\n", listOf(GradleOperation.AddRootPluginAlias("ksp")))).isEqualTo("allprojects { }\n")
+    }
+
     private fun fixture(name: String): String = Files.readString(Paths.get(testDataPath, "editing", name))
 }

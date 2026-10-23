@@ -8,6 +8,7 @@ import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.util.PsiTreeUtil
 import com.kmpdependencyresolver.core.change.ChangePlan
+import com.kmpdependencyresolver.core.change.GradleOperation
 import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
 import java.security.MessageDigest
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -23,7 +24,8 @@ data class FileChangePreview(
     val modificationStamp: Long,
 )
 
-data class ChangePreview(val files: List<FileChangePreview>, val unifiedDiff: String)
+/** Changed files only; the dialog renders them with the IDE diff viewer. */
+data class ChangePreview(val files: List<FileChangePreview>)
 
 class PreviewException(val code: String, message: String) : IllegalStateException(message)
 
@@ -43,9 +45,13 @@ class ChangePreviewService(
         val build = filePreview(module.buildFile, PreviewFileKind.KOTLIN_DSL) {
             kotlinRenderer.render(it, plan.gradleOperations)
         }
-        val changed = listOf(catalog, build).filter { it.originalText != it.proposedText }
+        // Companion plugins also need `alias(...) apply false` in the root script so every module shares one version.
+        val rootBuild = snapshot.modules.firstOrNull { it.id == ":" }?.buildFile
+            ?.takeIf { it != module.buildFile && it.endsWith(".kts") && plan.gradleOperations.any { op -> op is GradleOperation.AddRootPluginAlias } }
+            ?.let { path -> filePreview(path, PreviewFileKind.KOTLIN_DSL) { kotlinRenderer.renderRoot(it, plan.gradleOperations) } }
+        val changed = listOfNotNull(catalog, rootBuild, build).filter { it.originalText != it.proposedText }
         changed.forEach { validate(project, it.kind, it.proposedText) }
-        return ChangePreview(changed, changed.joinToString("\n") { unifiedDiff(it) })
+        return ChangePreview(changed)
     }
 
     private fun filePreview(path: String, kind: PreviewFileKind, render: (String) -> String): FileChangePreview {
@@ -69,13 +75,5 @@ class ChangePreviewService(
 
         fun sha256(text: String): String = MessageDigest.getInstance("SHA-256")
             .digest(text.encodeToByteArray()).joinToString("") { "%02x".format(it) }
-
-        private fun unifiedDiff(change: FileChangePreview): String = buildString {
-            appendLine("--- ${change.path}")
-            appendLine("+++ ${change.path}")
-            appendLine("@@ -1,${change.originalText.lines().size} +1,${change.proposedText.lines().size} @@")
-            change.originalText.lineSequence().forEach { appendLine("-$it") }
-            change.proposedText.lineSequence().forEach { appendLine("+$it") }
-        }.trimEnd()
     }
 }

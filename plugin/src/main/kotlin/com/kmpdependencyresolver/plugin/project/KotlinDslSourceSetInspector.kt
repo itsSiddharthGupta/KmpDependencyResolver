@@ -15,6 +15,8 @@ data class KotlinDslInspection(
     val pluginAliases: Set<String>,
     val configurations: Set<String>,
     val copyOnlyReasons: List<String>,
+    /** Kotlin target names compiled by each main source set, e.g. `commonMain` -> `[android, iosArm64]`. */
+    val sourceSetTargetNames: Map<String, List<String>> = emptyMap(),
 )
 
 /**
@@ -91,6 +93,14 @@ class KotlinDslSourceSetInspector {
         edges.keys.forEach { name -> (leafFamilies[name] ?: familyByPrefix(name))?.let { propagate(name, it) } }
         if ("commonMain" in edges) families.getOrPut("commonMain") { linkedSetOf() } += targets
 
+        val targetNames = linkedMapOf<String, MutableSet<String>>()
+        fun propagateName(name: String, target: String, visited: MutableSet<String> = linkedSetOf()) {
+            if (!visited.add(name)) return
+            targetNames.getOrPut(name) { sortedSetOf() } += target
+            edges[name].orEmpty().forEach { propagateName(it, target, visited) }
+        }
+        declaredTargets.forEach { propagateName("${it.name}Main", it.name) }
+
         val mainSourceSets = edges.keys.map { name -> SourceSetNode(name, families[name].orEmpty(), edges[name].orEmpty()) }
         val testSourceSets = if (targets.isEmpty()) emptyList() else mainSourceSets.mapNotNull { main ->
             val test = testName(main.name, declaredTargets) ?: return@mapNotNull null
@@ -105,7 +115,7 @@ class KotlinDslSourceSetInspector {
             if (targets.isEmpty()) add("No Kotlin Multiplatform targets are declared in this module's kotlin { } block.")
             if (DYNAMIC_SOURCE_SET.containsMatchIn(sourceSetText)) add("Dynamic source-set construction cannot be mapped confidently.")
         }
-        return KotlinDslInspection(targets, sourceSets, plugins, configurations, reasons)
+        return KotlinDslInspection(targets, sourceSets, plugins, configurations, reasons, targetNames.mapValues { it.value.toList() })
     }
 
     private data class DeclaredTarget(val name: String, val family: TargetFamily)

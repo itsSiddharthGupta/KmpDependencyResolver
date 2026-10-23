@@ -14,6 +14,7 @@ data class GradleModuleSnapshot(
     val pluginAliases: Set<String>,
     val configurations: Set<String>,
     val copyOnlyReasons: List<String> = emptyList(),
+    val sourceSetTargetNames: Map<String, List<String>> = emptyMap(),
 )
 
 data class ProjectSnapshot(
