@@ -23,7 +23,6 @@ import com.kmpdependencyresolver.plugin.editing.ChangePreview
 import com.kmpdependencyresolver.plugin.editing.PreviewException
 import com.kmpdependencyresolver.plugin.editing.RenderException
 import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
-import com.kmpdependencyresolver.plugin.project.AddCapability
 import java.awt.GridLayout
 import java.nio.file.Path
 import javax.swing.JComboBox
@@ -94,6 +93,9 @@ interface AddDependencyBackend {
     fun apply(preview: ChangePreview): ApplyResult
 }
 
+/** Add cannot run for the chosen module; [error] says why in user terms. */
+class AddUnavailableException(val error: UserFacingError) : IllegalArgumentException(error.message)
+
 class AddDependencyFlow(
     private val backend: AddDependencyBackend,
     private val recommender: SourceSetRecommender = SourceSetRecommender(),
@@ -102,8 +104,8 @@ class AddDependencyFlow(
         val snapshot = backend.snapshot()
         val module = snapshot.modules.firstOrNull { it.id == moduleId }
             ?: throw IllegalArgumentException("Module $moduleId is unavailable")
-        require(snapshot.catalogPath != null && snapshot.addCapability(moduleId) == AddCapability.APPLY) {
-            "Add requires a writable Kotlin DSL module and gradle/libs.versions.toml"
+        snapshot.addUnavailableReason(moduleId)?.let { reason ->
+            throw AddUnavailableException(UserFacingError("ADD_UNAVAILABLE", "Add isn't available for $moduleId", reason))
         }
         val recommendation = recommender.recommend(candidate, ModuleModel(module.id, module.sourceSets))
         val compatibleSourceSets = module.sourceSets

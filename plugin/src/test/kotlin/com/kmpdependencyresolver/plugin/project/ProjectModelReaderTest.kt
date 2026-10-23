@@ -73,6 +73,27 @@ class ProjectModelReaderTest : BasePlatformTestCase() {
         assertThat(module.targets).contains(TargetFamily.WASM)
     }
 
+    fun `test KMP project with a plain JVM Ktor server module`() {
+        // Layout of a real project: KMP app/network/core modules plus a kotlin("jvm") Ktor :server.
+        myFixture.copyDirectoryToProject("projects/kmp-with-jvm-server", "")
+
+        val snapshot = JetBrainsProjectModelReader().read(project)
+        val byId = snapshot.modules.associateBy { it.id }
+
+        assertThat(byId.keys).containsExactlyInAnyOrder(":", ":app:androidApp", ":app:network", ":app:shared", ":core", ":server")
+        assertThat(snapshot.addUnavailableReason(":server"))
+            .isEqualTo(":server isn't a Kotlin Multiplatform module. Add supports KMP modules only; use Copy to get the declaration.")
+        assertThat(snapshot.addUnavailableReason(":app:androidApp")).contains("isn't a Kotlin Multiplatform module")
+        assertThat(snapshot.addUnavailableReason(":app:network")).isNull()
+        assertThat(snapshot.addUnavailableReason(":app:shared")).isNull()
+        assertThat(snapshot.addUnavailableReason(":core")).isNull()
+        val network = byId.getValue(":app:network")
+        assertThat(network.targets).containsExactlyInAnyOrder(TargetFamily.ANDROID, TargetFamily.IOS)
+        assertThat(network.sourceSets.map { it.name }).contains("commonMain", "androidMain", "iosMain", "iosArm64Main")
+        assertThat(byId.getValue(":core").targets).containsExactlyInAnyOrder(TargetFamily.ANDROID, TargetFamily.IOS, TargetFamily.JVM)
+        assertThat(snapshot.existingAliases).contains("ktor-serverCore", "ktor-clientCore")
+    }
+
     fun `test gradle path is relative to the build root`() {
         assertThat(JetBrainsProjectModelReader.gradlePath("/work/app", "/work/app")).isEqualTo(":")
         assertThat(JetBrainsProjectModelReader.gradlePath("/work/app/", "/work/app/feature/shared")).isEqualTo(":feature:shared")

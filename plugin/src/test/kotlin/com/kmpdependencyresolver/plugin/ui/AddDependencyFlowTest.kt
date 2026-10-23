@@ -32,8 +32,28 @@ class AddDependencyFlowTest {
         val unsupported = snapshot().copy(catalogPath = null)
 
         assertThatThrownBy { AddDependencyFlow(FakeBackend(unsupported)).start(candidate(), ":shared") }
-            .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("Kotlin DSL")
+            .isInstanceOf(AddUnavailableException::class.java)
+            .hasMessageContaining("gradle/libs.versions.toml")
+    }
+
+    @Test
+    fun `non KMP module explains that Add is KMP only instead of a generic error`() {
+        val server = GradleModuleSnapshot(":server", "/project/server/build.gradle.kts", emptySet(), emptyList(), emptySet(), setOf("implementation"),
+            listOf("No Kotlin Multiplatform targets are declared in this module's kotlin { } block."))
+        val withServer = snapshot().let { it.copy(modules = it.modules + server) }
+
+        val error = runCatching { AddDependencyFlow(FakeBackend(withServer)).start(candidate(), ":server") }.exceptionOrNull()
+
+        assertThat(error).isInstanceOf(AddUnavailableException::class.java)
+        val userError = (error as AddUnavailableException).error
+        assertThat(userError.title).isEqualTo("Add isn't available for :server")
+        assertThat(userError.message).isEqualTo(":server isn't a Kotlin Multiplatform module. Add supports KMP modules only; use Copy to get the declaration.")
+    }
+
+    @Test
+    fun `recipe status codes read as sentences`() {
+        assertThat(recipeStatusText("CURATED_CATALOG_STALE")).isEqualTo("online recipe update unavailable, using cached or bundled recipes")
+        assertThat(recipeStatusText("SOMETHING_NEW")).isEqualTo("SOMETHING_NEW")
     }
 
     @Test

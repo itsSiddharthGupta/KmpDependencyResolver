@@ -20,6 +20,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.project.Project
 import com.intellij.ui.SearchTextField
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
@@ -63,6 +64,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     private val presenter: SearchPresenter
     @Volatile private var snapshot: ProjectSnapshot? = null
     private var updatingModules = false
+    private val addButton = JButton("Add…")
 
     init {
         border = JBUI.Borders.empty(8)
@@ -71,6 +73,10 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         target.accessibleContext.accessibleName = "Required target"
         results.accessibleContext.accessibleName = "Dependency results"
         results.cellRenderer = ResultCellRenderer()
+        // Modules Add can't edit (plain JVM/Android, Groovy, …) stay selectable for Copy but say so up front.
+        module.renderer = SimpleListCellRenderer.create { label, value: String?, _ ->
+            label.text = value.orEmpty() + if (value != null && snapshot?.addUnavailableReason(value) != null) "  (Copy only)" else ""
+        }
         previews.isSelected = ApplicationManager.getApplication().service<ResolverSettings>().state.includePreReleases
 
         val debounceScheduler = TaskScheduler { delay, task ->
@@ -88,7 +94,10 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
             activeModule = { module.selectedItem as? String }, onState = ::render,
             onAdd = ::addDependency,
         )
-        module.addActionListener { if (!updatingModules) search() }
+        module.addActionListener {
+            updateAddAvailability()
+            if (!updatingModules) search()
+        }
 
         val filters = JPanel().apply { add(module); add(target); add(previews) }
         val north = JPanel(BorderLayout()).apply { add(query, BorderLayout.NORTH); add(filters, BorderLayout.CENTER); add(status, BorderLayout.SOUTH) }
@@ -96,7 +105,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         add(JBScrollPane(results), BorderLayout.CENTER)
         add(JPanel().apply {
             add(JButton("Copy").apply { addActionListener { showCopyMenu() } })
-            add(JButton("Add…").apply { addActionListener { addSelectedDependency() } })
+            add(addButton.apply { addActionListener { addSelectedDependency() } })
         }, BorderLayout.SOUTH)
 
         query.textEditor.document.addDocumentListener(object : DocumentListener {
@@ -137,9 +146,16 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
                 } finally {
                     updatingModules = false
                 }
+                updateAddAvailability()
                 if ((module.selectedItem as? String) != previous) search()
             }
             .submit(AppExecutorUtil.getAppExecutorService())
+    }
+
+    private fun updateAddAvailability() {
+        val reason = (module.selectedItem as? String)?.let { id -> snapshot?.addUnavailableReason(id) }
+        addButton.isEnabled = reason == null
+        addButton.toolTipText = reason
     }
 
     private fun search() {
@@ -159,7 +175,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
     private fun render(state: SearchUiState) {
         listModel.clear()
         state.results.forEach(listModel::addElement)
-        val messages = state.providerMessages + listOfNotNull(service.recipeStatus())
+        val messages = state.providerMessages + listOfNotNull(service.recipeStatus()?.let(::recipeStatusText))
         status.text = when {
             state.searching -> "Searching…"
             messages.isNotEmpty() -> "${state.results.size} results · ${messages.joinToString()}"
@@ -199,7 +215,7 @@ class SearchPanel(private val project: Project) : JPanel(BorderLayout()), Dispos
         var confirmation = when (val started = inBackground("Reading project model") { flow.start(candidate, moduleId, preferredVersion) }) {
             null -> return
             else -> started.getOrElse { exception ->
-                showError(UserFacingError.from("UNSUPPORTED_PROJECT", exception))
+                showError((exception as? AddUnavailableException)?.error ?: UserFacingError.from("UNSUPPORTED_PROJECT", exception))
                 return
             }
         }

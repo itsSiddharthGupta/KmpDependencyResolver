@@ -24,3 +24,10 @@ data class UserFacingError(
         }
     }
 }
+
+/** Readable status-line text for a recipe-update code; unknown codes are shown as they are. */
+fun recipeStatusText(code: String): String = when (code) {
+    "CURATED_CATALOG_STALE" -> "online recipe update unavailable, using cached or bundled recipes"
+    "RECIPE_UPDATE_FAILED" -> "recipe update failed, using cached or bundled recipes"
+    else -> code
+}

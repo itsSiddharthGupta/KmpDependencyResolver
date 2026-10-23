@@ -28,6 +28,23 @@ data class ProjectSnapshot(
         if (modules.firstOrNull { it.id == moduleId }?.copyOnlyReasons.isNullOrEmpty()) AddCapability.APPLY
         else AddCapability.COPY_ONLY
 
+    /**
+     * Why Add cannot edit [moduleId], phrased for the user, or null when Add is available. Plain JVM or
+     * Android modules are out of scope on purpose: Add edits Kotlin Multiplatform modules only.
+     */
+    fun addUnavailableReason(moduleId: String): String? {
+        val module = modules.firstOrNull { it.id == moduleId } ?: return "Module $moduleId is no longer part of the project."
+        return when {
+            module.buildFile.endsWith(".kts") && module.targets.isEmpty() ->
+                "$moduleId isn't a Kotlin Multiplatform module. Add supports KMP modules only; use Copy to get the declaration."
+            module.copyOnlyReasons.isNotEmpty() ->
+                "Add can't safely edit $moduleId: ${module.copyOnlyReasons.joinToString(" ")} Use Copy instead."
+            catalogPath == null ->
+                "No gradle/libs.versions.toml was found at the Gradle root, and Add records dependencies there. Use Copy instead."
+            else -> null
+        }
+    }
+
     /** The module whose project directory is the nearest ancestor of [filePath]. */
     fun moduleContaining(filePath: String): GradleModuleSnapshot? {
         val normalized = filePath.replace('\\', '/')
