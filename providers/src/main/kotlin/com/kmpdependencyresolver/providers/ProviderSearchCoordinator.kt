@@ -15,29 +15,36 @@ data class AggregatedSearchResult(val candidates: List<Candidate>, val failures:
 
 class ProviderSearchCoordinator(
     private val providers: List<SearchProvider>,
-    parallelism: Int = 3,
     private val timeoutMillis: Long = 15_000,
     private val merger: CandidateMerger = CandidateMerger(),
 ) : AutoCloseable {
-    private val executor = Executors.newFixedThreadPool(parallelism.coerceAtLeast(1))
+    // Unbounded: a provider abandoned after the deadline may still be finishing its HTTP call, and it
+    // must not occupy a slot that the next query's providers need.
+    private val executor = Executors.newCachedThreadPool { runnable ->
+        Thread(runnable, "kmp-dependency-search").apply { isDaemon = true }
+    }
 
     fun search(request: SearchRequest): AggregatedSearchResult {
-        val futures = providers.mapIndexed { index, provider ->
-            executor.submit<ProviderResult> { provider.search(request) } to "provider-$index"
+        val futures = providers.map { provider ->
+            executor.submit<ProviderResult> { provider.search(request) } to provider.id
         }
         val results = mutableListOf<ProviderResult>()
         val failures = mutableListOf<ProviderFailure>()
+        // One shared deadline: waiting timeoutMillis per provider let three slow providers take 3x as long.
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
         try {
-            for ((future, fallbackId) in futures) {
+            for ((future, providerId) in futures) {
                 try {
-                    val result = future.get(timeoutMillis, TimeUnit.MILLISECONDS)
+                    val result = future.get((deadline - System.nanoTime()).coerceAtLeast(0), TimeUnit.NANOSECONDS)
                     results += result
                     result.failure?.let(failures::add)
                 } catch (_: TimeoutException) {
                     future.cancel(true)
-                    failures += ProviderFailure(fallbackId, "Provider timed out")
+                    failures += ProviderFailure(providerId, "Provider timed out")
                 } catch (exception: java.util.concurrent.ExecutionException) {
-                    failures += ProviderFailure(fallbackId, exception.cause?.message ?: "Provider failed")
+                    failures += ProviderFailure(providerId, exception.cause?.message ?: "Provider failed")
+                } catch (_: CancellationException) {
+                    failures += ProviderFailure(providerId, "Provider cancelled")
                 }
             }
         } catch (exception: InterruptedException) {

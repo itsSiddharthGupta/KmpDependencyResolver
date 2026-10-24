@@ -30,10 +30,10 @@ class GoogleMavenProviderTest {
 
         val result = provider.search(SearchRequest("androidx.lifecycle", setOf(TargetFamily.ANDROID), false))
 
-        assertThat(transport.uris).contains(
+        // The group index carries every version inline, so no per-artifact maven-metadata.xml request is needed.
+        assertThat(transport.uris).containsExactly(
             "https://dl.google.com/dl/android/maven2/master-index.xml",
             "https://dl.google.com/dl/android/maven2/androidx/lifecycle/group-index.xml",
-            "https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/maven-metadata.xml",
         )
         assertThat(result.candidates).extracting<String> { it.coordinates.notation }
             .contains("androidx.lifecycle:lifecycle-runtime")
@@ -65,6 +65,62 @@ class GoogleMavenProviderTest {
         assertThat(result.candidates.first().provenance.single().detail).contains("Stale cache")
         assertThat(transport.uris).isEmpty()
         assertThat(evidenceReads).isZero()
+    }
+
+    @Test
+    fun `exact coordinate query reads only that group and artifact`() {
+        val groupIndex = """<?xml version="1.0" encoding="UTF-8"?>
+            <androidx.room>
+              <room-runtime versions="2.7.0,2.8.4,2.9.0-alpha01"/>
+              <room-runtime-android versions="2.7.0,2.8.4"/>
+              <room-compiler versions="2.8.4"/>
+            </androidx.room>""".trimIndent().encodeToByteArray()
+        val transport = GoogleFixtureTransport(resource("google-master-index.xml"), groupIndex, ByteArray(0))
+        val reads = mutableListOf<String>()
+        val reader = PublicationEvidenceReader { coordinates, version ->
+            reads += "${coordinates.notation}:$version"
+            PublicationEvidence(coordinates, setOf(TargetFamily.ANDROID, TargetFamily.IOS), EvidenceKind.VERIFIED)
+        }
+
+        val result = GoogleMavenProvider(transport, GoogleRecordingCache(), reader, clock = { 1 })
+            .search(SearchRequest("androidx.room:room-runtime", setOf(TargetFamily.ANDROID), false))
+
+        assertThat(result.failure).isNull()
+        assertThat(result.candidates).extracting<String> { it.coordinates.notation }.containsExactly("androidx.room:room-runtime")
+        assertThat(result.candidates.single().versions).extracting<String> { it.value }.containsExactly("2.8.4", "2.7.0")
+        assertThat(reads).containsExactly("androidx.room:room-runtime:2.8.4")
+        assertThat(transport.uris).containsExactly(
+            "https://dl.google.com/dl/android/maven2/master-index.xml",
+            "https://dl.google.com/dl/android/maven2/androidx/room/group-index.xml",
+        )
+    }
+
+    @Test
+    fun `artifact name finds its group by segment and exact coordinates outside the index return nothing`() {
+        val groupIndex = """<androidx.room><room-runtime versions="2.8.4"/><room-ktx versions="2.8.4"/></androidx.room>""".encodeToByteArray()
+        val reader = PublicationEvidenceReader { coordinates, _ -> PublicationEvidence(coordinates, setOf(TargetFamily.ANDROID), EvidenceKind.VERIFIED) }
+
+        val byName = GoogleMavenProvider(GoogleFixtureTransport(resource("google-master-index.xml"), groupIndex, ByteArray(0)), GoogleRecordingCache(), reader, clock = { 1 })
+            .search(SearchRequest("room-runtime", emptySet(), false))
+        val missing = GoogleMavenProvider(GoogleFixtureTransport(resource("google-master-index.xml"), groupIndex, ByteArray(0)), GoogleRecordingCache(), reader, clock = { 1 })
+            .search(SearchRequest("io.ktor:ktor-client-core", emptySet(), false))
+
+        assertThat(byName.candidates).extracting<String> { it.coordinates.notation }.containsExactly("androidx.room:room-runtime")
+        assertThat(missing.failure).isNull()
+        assertThat(missing.candidates).isEmpty()
+    }
+
+    @Test
+    fun `falls back to maven metadata when the group index omits versions`() {
+        val groupIndex = """<androidx.lifecycle><lifecycle-runtime/></androidx.lifecycle>""".encodeToByteArray()
+        val transport = GoogleFixtureTransport(resource("google-master-index.xml"), groupIndex, resource("google-maven-metadata.xml"))
+        val reader = PublicationEvidenceReader { coordinates, _ -> PublicationEvidence(coordinates, setOf(TargetFamily.ANDROID), EvidenceKind.VERIFIED) }
+
+        val result = GoogleMavenProvider(transport, GoogleRecordingCache(), reader, clock = { 1 })
+            .search(SearchRequest("androidx.lifecycle:lifecycle-runtime", emptySet(), false))
+
+        assertThat(transport.uris).contains("https://dl.google.com/dl/android/maven2/androidx/lifecycle/lifecycle-runtime/maven-metadata.xml")
+        assertThat(result.candidates.single().versions).extracting<String> { it.value }.containsExactly("2.8.7")
     }
 
     private fun resource(name: String): ByteArray = checkNotNull(javaClass.getResourceAsStream("/maven/$name")).use { it.readAllBytes() }

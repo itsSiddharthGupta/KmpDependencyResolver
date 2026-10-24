@@ -49,6 +49,7 @@ class ResultCellRendererTest {
         assertThat(description.lineWrap).isTrue()
         assertThat(description.wrapStyleWord).isTrue()
         assertThat(description.rows).isEqualTo(2)
+        assertThat((rendered as javax.swing.JComponent).toolTipText).isEqualTo("Official publisher: Ktor")
     }
 
     private fun descendants(component: Component): List<Component> = buildList {

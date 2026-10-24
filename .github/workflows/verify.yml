@@ -7,9 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version without the v prefix
+        description: Plugin release version without the v prefix (Marketplace publishing only)
         required: true
         default: 0.1.0
+      publish_catalog:
+        description: Publish registry/catalog-v1.json to the release named in registry/manifest.json
+        type: boolean
+        default: true
+      publish_marketplace:
+        description: Sign and publish the plugin to the JetBrains Marketplace (only after the manual smoke matrix passes)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,28 +49,20 @@ jobs:
           name: unsigned-plugin
           path: plugin/build/distributions/*.zip
 
-  release:
-    if: github.event_name == 'workflow_dispatch'
-    needs: verify
+  # Publishes only the signed recipe catalog, independently of the Marketplace release, so online recipe
+  # updates can go live before the plugin is published. Re-running is safe: an identical asset is left
+  # alone, and a different one fails because release assets referenced by the manifest are immutable.
+  publish-recipe-catalog:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_catalog
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
-      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-      PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
-      PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
       RECIPE_ED25519_PRIVATE_KEY: ${{ secrets.RECIPE_ED25519_PRIVATE_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-          cache: gradle
-      - uses: gradle/actions/setup-gradle@v4
-      - name: Verify recipe manifest signature
+      - name: Verify recipe manifest signature and catalog digest
         shell: bash
         run: |
           set -euo pipefail
@@ -72,10 +72,60 @@ jobs:
           printf '%s' "$RECIPE_ED25519_PRIVATE_KEY" | base64 --decode > "$key"
           jq -r '[.schemaVersion,.catalogUrl,.byteLength,.maxBytes,.sha256] | map(tostring) | join("\n")' registry/manifest.json | perl -0pe 's/\n\z//' > "$payload"
           openssl pkeyutl -sign -rawin -inkey "$key" -keyform DER -in "$payload" -out "$signature"
-          actual="$(base64 -w0 < "$signature")"
-          expected="$(jq -r .signature registry/manifest.json)"
-          test "$actual" = "$expected"
-      - name: Publish immutable recipe catalog asset
-        run: gh release create "v${{ inputs.version }}" registry/catalog-v1.json --target "$GITHUB_SHA" --generate-notes
+          test "$(base64 -w0 < "$signature")" = "$(jq -r .signature registry/manifest.json)"
+          test "$(stat -c %s registry/catalog-v1.json)" = "$(jq -r .byteLength registry/manifest.json)"
+          test "$(sha256sum registry/catalog-v1.json | cut -d' ' -f1)" = "$(jq -r .sha256 registry/manifest.json)"
+      - name: Upload catalog to the release referenced by the manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(jq -r .catalogUrl registry/manifest.json)"
+          prefix="https://github.com/${GITHUB_REPOSITORY}/releases/download/"
+          case "$url" in "$prefix"*/catalog-v1.json) ;; *) echo "::error::Unexpected catalogUrl $url"; exit 1 ;; esac
+          tag="${url#"$prefix"}"
+          tag="${tag%/catalog-v1.json}"
+          if ! gh release view "$tag" > /dev/null 2>&1; then
+            gh release create "$tag" registry/catalog-v1.json --target "$GITHUB_SHA" --title "$tag" --notes "Signed recipe catalog (catalog-v1.json)."
+            exit 0
+          fi
+          existing="$RUNNER_TEMP/existing"
+          mkdir -p "$existing"
+          if gh release download "$tag" --pattern catalog-v1.json --dir "$existing" 2> /dev/null; then
+            if cmp -s "$existing/catalog-v1.json" registry/catalog-v1.json; then
+              echo "Release $tag already has an identical catalog-v1.json; nothing to do."
+            else
+              echo "::error::Release $tag has a different catalog-v1.json. Assets referenced by the signed manifest are immutable; publish a new tag and re-sign the manifest."
+              exit 1
+            fi
+          else
+            gh release upload "$tag" registry/catalog-v1.json
+          fi
+
+  publish-marketplace:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_marketplace
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+      PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Create the GitHub release unless the catalog job already did
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "v$VERSION" > /dev/null 2>&1 || gh release create "v$VERSION" --target "$GITHUB_SHA" --generate-notes
       - name: Sign and publish Marketplace plugin
         run: ./gradlew :plugin:signPlugin :plugin:publishPlugin

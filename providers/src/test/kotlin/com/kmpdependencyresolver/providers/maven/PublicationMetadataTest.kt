@@ -22,6 +22,41 @@ class PublicationMetadataTest {
     }
 
     @Test
+    fun `AndroidX android variant published as jvm with android environment counts as Android`() {
+        val module = """
+            {"formatVersion":"1.1","component":{"group":"androidx.room","module":"room-runtime","version":"2.8.4"},
+             "variants":[
+               {"name":"androidApiElements-published","attributes":{"org.gradle.jvm.environment":"android","org.jetbrains.kotlin.platform.type":"jvm"}},
+               {"name":"jvmApiElements-published","attributes":{"org.gradle.jvm.environment":"standard-jvm","org.jetbrains.kotlin.platform.type":"jvm"}},
+               {"name":"iosArm64ApiElements-published","attributes":{"org.jetbrains.kotlin.native.target":"ios_arm64","org.jetbrains.kotlin.platform.type":"native"}}
+             ]}
+        """.trimIndent().encodeToByteArray()
+
+        val evidence = GradleModuleMetadataParser().parse(module)
+
+        assertThat(evidence.supportedTargets).containsExactlyInAnyOrder(TargetFamily.ANDROID, TargetFamily.JVM, TargetFamily.IOS)
+        assertThat(evidence.evidence).isEqualTo(EvidenceKind.VERIFIED)
+    }
+
+    @Test
+    fun `repository reader accepts the media types Central and Google serve for module files`() {
+        val requested = mutableListOf<Set<String>>()
+        val transport = object : com.kmpdependencyresolver.providers.http.HttpTransport {
+            override fun execute(request: com.kmpdependencyresolver.providers.http.HttpRequestSpec): com.kmpdependencyresolver.providers.http.HttpPayload {
+                requested += request.expectedContentTypes
+                return com.kmpdependencyresolver.providers.http.HttpPayload(200, emptyMap(), resource("multiplatform.module"))
+            }
+        }
+
+        val evidence = RepositoryPublicationEvidenceReader(transport, "https://repo1.maven.org/maven2")
+            .read(Coordinates("org.jetbrains.kotlinx", "kotlinx-serialization-json"), "1.11.0")
+
+        assertThat(requested.first()).contains("application/vnd.org.gradle.module+json", "application/octet-stream", "application/json")
+        assertThat(evidence.evidence).isEqualTo(EvidenceKind.VERIFIED)
+        assertThat(evidence.supportedTargets).contains(TargetFamily.ANDROID, TargetFamily.IOS)
+    }
+
+    @Test
     fun `tooling metadata supplements families and retains raw Kotlin targets`() {
         val evidence = KotlinToolingMetadataParser().parse(resource("tooling-metadata.json"))
 

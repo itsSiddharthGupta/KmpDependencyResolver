@@ -3,6 +3,7 @@ package com.kmpdependencyresolver.core.change
 import com.kmpdependencyresolver.core.model.Candidate
 import com.kmpdependencyresolver.core.model.Coordinates
 import com.kmpdependencyresolver.core.model.PlacementRecommendation
+import com.kmpdependencyresolver.core.model.TargetFamily
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
 
 sealed interface CatalogOperation {
@@ -11,23 +12,45 @@ sealed interface CatalogOperation {
     data class PutPlugin(val alias: String, val pluginId: String, val versionAlias: String) : CatalogOperation
 }
 
+/**
+ * The pseudo source set of a plain Kotlin/JVM module. An [GradleOperation.AddDependency] for it is written
+ * into the module's top-level `dependencies { }` block rather than a KMP source-set block.
+ */
+const val JVM_SOURCE_SET = "main"
+
 sealed interface GradleOperation {
     data class AddDependency(val sourceSet: String, val configuration: String, val alias: String, val platform: Boolean) : GradleOperation
     data class AddPluginAlias(val alias: String, val applyFalse: Boolean) : GradleOperation
+
+    /** `add("<configuration>", libs.<alias>)` in the module's top-level `dependencies { }`, e.g. per-target KSP. */
+    data class AddTopLevelDependency(val configuration: String, val alias: String) : GradleOperation
+
+    /** `alias(libs.plugins.<alias>) apply false` in the root build script, when it has a `plugins { }` block. */
+    data class AddRootPluginAlias(val alias: String) : GradleOperation
 }
 
-data class CatalogLibrary(val coordinates: Coordinates, val versionAlias: String?)
-data class CatalogPlugin(val pluginId: String, val versionAlias: String)
+/** A `[libraries]` entry; [version] holds a literal version when the entry does not use `version.ref`. */
+data class CatalogLibrary(val coordinates: Coordinates, val versionAlias: String?, val version: String? = null)
+
+/** A `[plugins]` entry; [version] holds a literal version when the entry does not use `version.ref`. */
+data class CatalogPlugin(val pluginId: String, val versionAlias: String?, val version: String? = null)
 data class CatalogState(
     val versions: Map<String, String>,
     val libraries: Map<String, CatalogLibrary>,
     val plugins: Map<String, CatalogPlugin>,
 )
 
+/**
+ * @property sourceSetTargets target families compiled by each Kotlin source set, when known.
+ * @property sourceSetTargetNames Kotlin target names (`android`, `iosArm64`, `desktop`) compiled by each source set.
+ * Both are empty for a module whose Kotlin Multiplatform shape is unknown.
+ */
 data class ChangeProjectSnapshot(
     val moduleId: String,
     val catalog: CatalogState,
     val configurations: Set<String>,
+    val sourceSetTargets: Map<String, Set<TargetFamily>> = emptyMap(),
+    val sourceSetTargetNames: Map<String, List<String>> = emptyMap(),
 )
 
 data class DependencySelection(

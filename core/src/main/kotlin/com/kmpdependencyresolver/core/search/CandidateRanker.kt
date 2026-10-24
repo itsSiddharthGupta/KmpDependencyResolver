@@ -20,9 +20,7 @@ class CandidateRanker(
     }
 
     private fun exactMatch(candidate: Candidate, query: String): Boolean =
-        candidate.coordinates.artifact.lowercase() == query ||
-            candidate.coordinates.notation.lowercase() == query ||
-            candidate.displayName.lowercase() == query
+        isExactQueryMatch(candidate.coordinates, query) || candidate.displayName.lowercase() == query
 
     private fun compatibilityRank(candidate: Candidate, module: ModuleModel): Int {
         val recommendation = recommender.recommend(candidate, module)

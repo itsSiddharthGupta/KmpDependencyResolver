@@ -32,6 +32,8 @@ data class RecipeUpdateResult(
     val catalog: JsonRecipeRegistry,
     val updated: Boolean,
     val code: String? = null,
+    /** Why an online update fell back to cached or bundled recipes, for logging. */
+    val failure: Throwable? = null,
 )
 
 class RemoteRecipeUpdater(
@@ -57,6 +59,10 @@ class RemoteRecipeUpdater(
                     URI.create(manifest.catalogUrl),
                     expectedContentTypes = JSON_TYPES + "application/octet-stream",
                     maxBytes = manifest.maxBytes,
+                    // github.com/.../releases/download/... answers 302 to its asset host. The payload is still
+                    // accepted only if its length and SHA-256 match the signed manifest.
+                    allowedRedirectHosts = RELEASE_ASSET_HOSTS,
+                    maxRedirects = 2,
                 ),
             )
             require(catalogPayload.status == 200) { "Catalog request failed" }
@@ -65,8 +71,8 @@ class RemoteRecipeUpdater(
             val registry = JsonRecipeRegistry.fromBytes(catalogPayload.body)
             install(catalogPayload.body)
             RecipeUpdateResult(registry, updated = true)
-        } catch (_: Exception) {
-            stale()
+        } catch (exception: Exception) {
+            stale().copy(failure = exception)
         }
     }
 
@@ -109,6 +115,7 @@ class RemoteRecipeUpdater(
         )
         const val RELEASE_PREFIX = "https://github.com/itsSiddharthGupta/KmpDependencyResolver/releases/download/"
         const val BUNDLED_PUBLIC_KEY_BASE64 = "MCowBQYDK2VwAyEAhMXjkTxFHp5x/yrCZESeWn1106IWK/DVCyiHMOlH7zI="
+        val RELEASE_ASSET_HOSTS = setOf("release-assets.githubusercontent.com", "objects.githubusercontent.com")
         private const val CATALOG_FILE = "catalog-v1.json"
         private const val MANIFEST_MAX_BYTES = 64 * 1024
         private const val CATALOG_MAX_BYTES = 1_048_576

@@ -34,7 +34,9 @@ class ChangePreviewDialog(
             val panel = DiffManager.getInstance().createRequestPanel(project, disposable, null)
             panel.setRequest(request)
             diffPanels += panel
-            tabs.addTab(state.preview!!.files[index].path.substringAfterLast('/'), panel.component)
+            // Root and module scripts share a file name, so label tabs by project-relative path.
+            val path = state.preview!!.files[index].path
+            tabs.addTab(path.removePrefix(state.confirmation.snapshot.rootPath).trimStart('/', '\\'), panel.component)
         }
         add(tabs, BorderLayout.CENTER)
         preferredSize = JBUI.size(960, 640)

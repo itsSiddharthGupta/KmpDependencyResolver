@@ -1,5 +1,6 @@
 package com.kmpdependencyresolver.providers.klibs
 
+import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.TargetFamily
 import com.kmpdependencyresolver.core.search.SearchRequest
 import com.kmpdependencyresolver.providers.cache.CacheEntry
@@ -72,6 +73,43 @@ class KlibsProviderTest {
         assertThat(client.calledTools).isEmpty()
     }
 
+    @Test
+    fun `exact coordinates use getLatestVersion and keep targets from the matching project`() {
+        val search = Json.parseToJsonElement(
+            """{"projects":[{"projectName":"ktor","targets":["ANDROIDJVM","COMMON","JVM_1.8","NATIVE_ios_arm64"],
+               "packages":[{"groupId":"io.ktor","artifactId":"ktor-client-darwin","latestVersion":"3.6.0","latestStableVersion":"3.6.0"},
+                           {"groupId":"io.ktor","artifactId":"ktor-client-core","latestVersion":"3.6.0","latestStableVersion":"3.6.0"}]}]}""",
+        ).jsonObject
+        val latest = Json.parseToJsonElement("""{"latestVersion":{"version":"3.6.0"},"latestStableVersion":{"version":"3.6.0"},"packageFound":true}""").jsonObject
+        val client = FixtureMcpClient(search, latest)
+
+        val result = KlibsProvider(client, KlibsRecordingCache(), clock = { 1 })
+            .search(SearchRequest("io.ktor:ktor-client-core", setOf(TargetFamily.ANDROID, TargetFamily.IOS), includePreRelease = false))
+
+        assertThat(client.searchArguments.toString()).contains("\"query\":\"ktor-client-core\"", "\"maxPackagesPerProject\":200", "IOS")
+            .doesNotContain("AndroidJvm")
+        assertThat(client.calledTools).containsExactly("searchProjects", "getLatestVersion")
+        val candidate = result.candidates.single()
+        assertThat(candidate.coordinates.notation).isEqualTo("io.ktor:ktor-client-core")
+        assertThat(candidate.supportedTargets).containsExactlyInAnyOrder(TargetFamily.ANDROID, TargetFamily.JVM, TargetFamily.IOS)
+        assertThat(candidate.evidence).isEqualTo(EvidenceKind.VERIFIED)
+    }
+
+    @Test
+    fun `exact coordinates missing from search still return the looked up version without claiming targets`() {
+        val search = Json.parseToJsonElement("""{"projects":[]}""").jsonObject
+        val latest = Json.parseToJsonElement("""{"latestVersion":{"version":"2.8.5"},"latestStableVersion":{"version":"2.8.5"},"packageFound":true}""").jsonObject
+
+        val result = KlibsProvider(FixtureMcpClient(search, latest), KlibsRecordingCache(), clock = { 1 })
+            .search(SearchRequest("androidx.room:room-runtime", emptySet(), includePreRelease = false))
+
+        val candidate = result.candidates.single()
+        assertThat(candidate.coordinates.notation).isEqualTo("androidx.room:room-runtime")
+        assertThat(candidate.versions).extracting<String> { it.value }.containsExactly("2.8.5")
+        assertThat(candidate.supportedTargets).isEmpty()
+        assertThat(candidate.evidence).isEqualTo(EvidenceKind.UNKNOWN)
+    }
+
     private fun resource(name: String): JsonObject {
         val envelope = checkNotNull(javaClass.getResourceAsStream("/klibs/$name")).use { it.readAllBytes().decodeToString() }
         val root = Json.parseToJsonElement(envelope).jsonObject
@@ -86,12 +124,14 @@ private class FixtureMcpClient(
 ) : McpClient {
     var toolsListed = false
     var arguments: JsonObject = JsonObject(emptyMap())
+    var searchArguments: JsonObject = JsonObject(emptyMap())
     val calledTools = mutableListOf<String>()
     override fun initialize() = Unit
     override fun listTools(): Set<String> { toolsListed = true; return setOf("getLatestVersion", "searchProjects") }
     override fun callTool(name: String, arguments: JsonObject): JsonObject {
         calledTools += name
         this.arguments = arguments
+        if (name == "searchProjects") searchArguments = arguments
         return if (name == "getLatestVersion") latest else search
     }
 }

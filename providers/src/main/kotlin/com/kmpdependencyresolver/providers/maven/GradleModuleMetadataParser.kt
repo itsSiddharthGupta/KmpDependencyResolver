@@ -42,7 +42,14 @@ class GradleModuleMetadataParser {
                 "Native target contradicts platform type"
             }
             nativeTarget?.let(rawTargets::add)
-            targetFamily(platform, nativeTarget)
+            if (platform.equals("jvm", ignoreCase = true) &&
+                attributes[JVM_ENVIRONMENT]?.jsonPrimitive?.content.equals("android", ignoreCase = true)
+            ) {
+                // AndroidX/AGP KMP libraries publish their Android variant as platform type "jvm".
+                TargetFamily.ANDROID
+            } else {
+                targetFamily(platform, nativeTarget)
+            }
         }.toSet()
         PublicationEvidence(
             canonical,
@@ -58,6 +65,7 @@ class GradleModuleMetadataParser {
     private companion object {
         const val PLATFORM_TYPE = "org.jetbrains.kotlin.platform.type"
         const val NATIVE_TARGET = "org.jetbrains.kotlin.native.target"
+        const val JVM_ENVIRONMENT = "org.gradle.jvm.environment"
         val json = Json { ignoreUnknownKeys = true }
     }
 }
@@ -88,7 +96,7 @@ class RepositoryPublicationEvidenceReader(
             "/${coordinates.artifact}/$version/${coordinates.artifact}-$version"
         val primary = runCatching {
             val module = transport.execute(
-                HttpRequestSpec(URI.create("$base.module"), expectedContentTypes = setOf("application/json")),
+                HttpRequestSpec(URI.create("$base.module"), expectedContentTypes = MODULE_CONTENT_TYPES),
             )
             if (module.status == 200) GradleModuleMetadataParser().parse(module.body)
             else PublicationEvidence(null, emptySet(), EvidenceKind.UNKNOWN, detail = "Gradle metadata unavailable")
@@ -112,3 +120,10 @@ class RepositoryPublicationEvidenceReader(
         return supplement.copy(canonicalCoordinates = primary.canonicalCoordinates ?: coordinates)
     }
 }
+
+/**
+ * Repositories do not agree on a media type for `.module` files: Maven Central serves
+ * `application/vnd.org.gradle.module+json` and Google Maven serves `application/octet-stream`.
+ * The payload is still parsed strictly as JSON.
+ */
+internal val MODULE_CONTENT_TYPES = setOf("application/json", "application/vnd.org.gradle.module+json", "application/octet-stream")

@@ -3,6 +3,7 @@ package com.kmpdependencyresolver.plugin.ui
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import com.kmpdependencyresolver.core.model.TargetFamily
+import com.kmpdependencyresolver.core.search.defaultVersion
 import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Font
@@ -61,11 +62,12 @@ class ResultCellRenderer : ListCellRenderer<SearchResultItem> {
                 font = list.font
                 border = JBUI.Borders.emptyTop(3)
             })
-            toolTipText = value.publisherName?.let { "Official publisher: $it" }
             accessibleContext.accessibleName = "${value.candidate.coordinates.notation}, ${metadata(value)}"
         }
 
         return JPanel(BorderLayout()).apply {
+            // JList asks the returned component for its tooltip, so it must be set here, not on a child.
+            toolTipText = value.publisherName?.let { "Official publisher: $it" }
             isOpaque = true
             this.background = background
             if (previousSection != value.section) {
@@ -85,8 +87,7 @@ class ResultCellRenderer : ListCellRenderer<SearchResultItem> {
     }
 
     private fun selectedVersion(value: SearchResultItem): String =
-        value.candidate.versions.firstOrNull { it.stable }?.value
-            ?: value.candidate.versions.firstOrNull()?.value.orEmpty()
+        value.defaultVersion ?: defaultVersion(value.candidate, includePreRelease = false).orEmpty()
 
     private fun metadata(value: SearchResultItem): String = buildList {
         add(value.group.displayName())

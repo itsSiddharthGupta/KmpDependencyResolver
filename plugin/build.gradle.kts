@@ -29,7 +29,9 @@ dependencies {
         bundledPlugin("com.intellij.java")
         bundledPlugin("com.intellij.gradle")
         bundledPlugin("org.jetbrains.kotlin")
-        bundledPlugin("org.toml.lang")
+        // Tests only: lets ChangePreviewService validate rendered catalogs with TOML PSI. The plugin itself
+        // references no TOML classes, so plugin.xml declares no dependency on it.
+        testBundledPlugin("org.toml.lang")
         testFramework(TestFrameworkType.Platform)
         pluginVerifier()
         zipSigner()

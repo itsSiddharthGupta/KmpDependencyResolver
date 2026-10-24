@@ -42,4 +42,36 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room-runt
             "[plugins]", "com.google.devtools.ksp", "room-compiler", "commonMain.dependencies", "ksp(libs.room.compiler)",
         )
     }
+
+    @Test
+    fun `full recipe declares a version for every plugin version ref and uses per target KSP in KMP`() {
+        val text = CopyFormatter().format(selection.copy(kspTargets = listOf("android", "iosArm64")), CopyKind.FULL_RECIPE)
+
+        assertThat(text).contains("ksp = \"<plugin version>\" # set the com.google.devtools.ksp version")
+        assertThat(text).contains("ksp = { id = \"com.google.devtools.ksp\", version.ref = \"ksp\" }")
+        assertThat(text).endsWith(
+            """commonMain.dependencies {
+    implementation(libs.room.runtime)
+}
+
+dependencies {
+    add("kspAndroid", libs.room.compiler)
+    add("kspIosArm64", libs.room.compiler)
+}""",
+        )
+        assertThat(text).doesNotContain("ksp(libs")
+    }
+
+    @Test
+    fun `full recipe for a Kotlin JVM module uses the top level dependencies block`() {
+        val text = CopyFormatter().format(selection.copy(sourceSet = "main"), CopyKind.FULL_RECIPE)
+
+        assertThat(text).endsWith("dependencies {\n    implementation(libs.room.runtime)\n    ksp(libs.room.compiler)\n}")
+        assertThat(text).doesNotContain("main.dependencies")
+    }
+
+    @Test
+    fun `copy menu labels are human readable`() {
+        assertThat(CopyKind.entries.map { it.label }).containsExactly("Coordinate", "Kotlin DSL", "Version catalog", "Full recipe")
+    }
 }

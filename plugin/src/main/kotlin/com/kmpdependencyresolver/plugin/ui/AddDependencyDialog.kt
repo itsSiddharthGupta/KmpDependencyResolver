@@ -16,12 +16,13 @@ import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.ModuleModel
 import com.kmpdependencyresolver.core.model.PlacementRecommendation
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
+import com.kmpdependencyresolver.core.search.defaultVersion
 import com.kmpdependencyresolver.plugin.editing.ApplyRejectedException
 import com.kmpdependencyresolver.plugin.editing.ApplyResult
 import com.kmpdependencyresolver.plugin.editing.ChangePreview
 import com.kmpdependencyresolver.plugin.editing.PreviewException
+import com.kmpdependencyresolver.plugin.editing.RenderException
 import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
-import com.kmpdependencyresolver.plugin.project.AddCapability
 import java.awt.GridLayout
 import java.nio.file.Path
 import javax.swing.JComboBox
@@ -49,7 +50,15 @@ data class ConfirmationState(
     val companions: List<CompanionChoice>,
     val snapshot: ProjectSnapshot,
     val notice: String? = null,
-)
+) {
+    /** The same choices preselected again, e.g. when the dialog reopens after a preview error. */
+    fun withOptions(options: AddOptions): ConfirmationState = copy(
+        selectedVersion = options.version.takeIf { it in versions } ?: selectedVersion,
+        selectedSourceSet = options.sourceSet?.takeIf { it in sourceSets } ?: selectedSourceSet,
+        selectedConfiguration = options.configuration.takeIf { it in configurations } ?: selectedConfiguration,
+        companions = companions.map { it.copy(selected = it.locked || it.id in options.selectedCompanionIds) },
+    )
+}
 
 data class AddOptions(
     val version: String,
@@ -84,16 +93,19 @@ interface AddDependencyBackend {
     fun apply(preview: ChangePreview): ApplyResult
 }
 
+/** Add cannot run for the chosen module; [error] says why in user terms. */
+class AddUnavailableException(val error: UserFacingError) : IllegalArgumentException(error.message)
+
 class AddDependencyFlow(
     private val backend: AddDependencyBackend,
     private val recommender: SourceSetRecommender = SourceSetRecommender(),
 ) {
-    fun start(candidate: Candidate, moduleId: String): ConfirmationState {
+    fun start(candidate: Candidate, moduleId: String, preferredVersion: String? = null): ConfirmationState {
         val snapshot = backend.snapshot()
         val module = snapshot.modules.firstOrNull { it.id == moduleId }
             ?: throw IllegalArgumentException("Module $moduleId is unavailable")
-        require(snapshot.catalogPath != null && snapshot.addCapability(moduleId) == AddCapability.APPLY) {
-            "Add requires a writable Kotlin DSL module and gradle/libs.versions.toml"
+        snapshot.addUnavailableReason(moduleId)?.let { reason ->
+            throw AddUnavailableException(UserFacingError("ADD_UNAVAILABLE", "Add isn't available for $moduleId", reason))
         }
         val recommendation = recommender.recommend(candidate, ModuleModel(module.id, module.sourceSets))
         val compatibleSourceSets = module.sourceSets
@@ -115,7 +127,7 @@ class AddDependencyFlow(
             }
         }.sortedBy { it.id }
         val versions = candidate.versions.map { it.value }
-        val selectedVersion = candidate.versions.firstOrNull { it.stable }?.value ?: versions.firstOrNull()
+        val selectedVersion = preferredVersion?.takeIf { it in versions } ?: defaultVersion(candidate, includePreRelease = false)
             ?: throw IllegalArgumentException("${candidate.coordinates.notation} has no selectable version")
         return remember(ConfirmationState(
             candidate, moduleId, versions, selectedVersion, sourceSets,
@@ -157,6 +169,9 @@ class AddDependencyFlow(
             val preview = backend.preview(plan, current.snapshot)
             AddPreviewState(current, options.copy(selectedCompanionIds = selected), preview, baseWarnings)
         } catch (exception: PreviewException) {
+            val error = UserFacingError.from(exception.code, exception)
+            AddPreviewState(current, options, null, baseWarnings + error.message, error, false)
+        } catch (exception: RenderException) {
             val error = UserFacingError.from(exception.code, exception)
             AddPreviewState(current, options, null, baseWarnings + error.message, error, false)
         } catch (exception: RuntimeException) {
@@ -232,6 +247,7 @@ class AddDependencyDialog(project: Project, private val state: ConfirmationState
     override fun createCenterPanel(): JComponent = JPanel(GridLayout(0, 1, 0, JBUI.scale(6))).apply {
         state.notice?.let { add(JBLabel(it)) }
         add(JBLabel(state.recommendation.explanation))
+        add(labeled("Module", JBLabel(state.moduleId)))
         add(labeled("Version", version))
         add(labeled("Source set", sourceSet))
         add(labeled("Configuration", configuration))

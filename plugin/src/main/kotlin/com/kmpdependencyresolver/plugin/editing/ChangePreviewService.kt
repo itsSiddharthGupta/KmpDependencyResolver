@@ -1,6 +1,6 @@
 package com.kmpdependencyresolver.plugin.editing
 
-import com.intellij.openapi.editor.Document
+import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -8,6 +8,7 @@ import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.util.PsiTreeUtil
 import com.kmpdependencyresolver.core.change.ChangePlan
+import com.kmpdependencyresolver.core.change.GradleOperation
 import com.kmpdependencyresolver.plugin.project.ProjectSnapshot
 import java.security.MessageDigest
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -23,7 +24,8 @@ data class FileChangePreview(
     val modificationStamp: Long,
 )
 
-data class ChangePreview(val files: List<FileChangePreview>, val unifiedDiff: String)
+/** Changed files only; the dialog renders them with the IDE diff viewer. */
+data class ChangePreview(val files: List<FileChangePreview>)
 
 class PreviewException(val code: String, message: String) : IllegalStateException(message)
 
@@ -43,39 +45,41 @@ class ChangePreviewService(
         val build = filePreview(module.buildFile, PreviewFileKind.KOTLIN_DSL) {
             kotlinRenderer.render(it, plan.gradleOperations)
         }
-        val changed = listOf(catalog, build).filter { it.originalText != it.proposedText }
+        // Companion plugins also need `alias(...) apply false` in the root script so every module shares one version.
+        val rootBuild = snapshot.modules.firstOrNull { it.id == ":" }?.buildFile
+            ?.takeIf { it != module.buildFile && it.endsWith(".kts") && plan.gradleOperations.any { op -> op is GradleOperation.AddRootPluginAlias } }
+            ?.let { path -> filePreview(path, PreviewFileKind.KOTLIN_DSL) { kotlinRenderer.renderRoot(it, plan.gradleOperations) } }
+        val changed = listOfNotNull(catalog, rootBuild, build).filter { it.originalText != it.proposedText }
         changed.forEach { validate(project, it.kind, it.proposedText) }
-        return ChangePreview(changed, changed.joinToString("\n") { unifiedDiff(it) })
+        return ChangePreview(changed)
     }
 
+    /** Safe off the EDT: the VFS lookup runs outside the read lock, document access inside it. */
     private fun filePreview(path: String, kind: PreviewFileKind, render: (String) -> String): FileChangePreview {
-        val file = LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
+        val file = LocalFileSystem.getInstance().findFileByPath(path)
+            ?: LocalFileSystem.getInstance().refreshAndFindFileByPath(path)
             ?: throw PreviewException("FILE_NOT_FOUND", "File not found: $path")
-        val document = FileDocumentManager.getInstance().getDocument(file)
-            ?: throw PreviewException("DOCUMENT_UNAVAILABLE", "No document for: $path")
-        val original = document.text
-        return FileChangePreview(path, kind, original, render(original), sha256(original), document.modificationStamp)
+        val (original, stamp) = ReadAction.compute<Pair<String, Long>, RuntimeException> {
+            val document = FileDocumentManager.getInstance().getDocument(file)
+                ?: throw PreviewException("DOCUMENT_UNAVAILABLE", "No document for: $path")
+            document.text to document.modificationStamp
+        }
+        return FileChangePreview(path, kind, original, render(original), sha256(original), stamp)
     }
 
     companion object {
         fun validate(project: Project, kind: PreviewFileKind, text: String) {
-            val psi = when (kind) {
-                PreviewFileKind.KOTLIN_DSL -> KtPsiFactory(project).createFile("build.gradle.kts", text)
-                PreviewFileKind.VERSION_CATALOG -> PsiFileFactory.getInstance(project).createFileFromText("libs.versions.toml", text)
+            val error = ReadAction.compute<PsiErrorElement?, RuntimeException> {
+                val psi = when (kind) {
+                    PreviewFileKind.KOTLIN_DSL -> KtPsiFactory(project).createFile("build.gradle.kts", text)
+                    PreviewFileKind.VERSION_CATALOG -> PsiFileFactory.getInstance(project).createFileFromText("libs.versions.toml", text)
+                }
+                PsiTreeUtil.findChildOfType(psi, PsiErrorElement::class.java)
             }
-            val error = PsiTreeUtil.findChildOfType(psi, PsiErrorElement::class.java)
-            if (error != null) throw PreviewException("INVALID_RENDER", error.errorDescription)
+            if (error != null) throw PreviewException("INVALID_RENDER", ReadAction.compute<String, RuntimeException> { error.errorDescription })
         }
 
         fun sha256(text: String): String = MessageDigest.getInstance("SHA-256")
             .digest(text.encodeToByteArray()).joinToString("") { "%02x".format(it) }
-
-        private fun unifiedDiff(change: FileChangePreview): String = buildString {
-            appendLine("--- ${change.path}")
-            appendLine("+++ ${change.path}")
-            appendLine("@@ -1,${change.originalText.lines().size} +1,${change.proposedText.lines().size} @@")
-            change.originalText.lineSequence().forEach { appendLine("-$it") }
-            change.proposedText.lineSequence().forEach { appendLine("+$it") }
-        }.trimEnd()
     }
 }

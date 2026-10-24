@@ -18,7 +18,9 @@ fun interface HttpSender {
 class JdkHttpTransport(
     private val sender: HttpSender = defaultSender(),
 ) : HttpTransport {
-    override fun execute(request: HttpRequestSpec): HttpPayload {
+    override fun execute(request: HttpRequestSpec): HttpPayload = execute(request, redirectsLeft = request.maxRedirects)
+
+    private fun execute(request: HttpRequestSpec, redirectsLeft: Int): HttpPayload {
         if (!request.uri.scheme.equals("https", ignoreCase = true)) {
             throw HttpTransportException("HTTPS_REQUIRED", "Only HTTPS endpoints are allowed.")
         }
@@ -41,13 +43,28 @@ class JdkHttpTransport(
         } catch (exception: InterruptedException) {
             Thread.currentThread().interrupt()
             throw HttpTransportException("REQUEST_CANCELLED", "HTTP request was cancelled.", exception)
+        } catch (exception: java.net.http.HttpTimeoutException) {
+            throw HttpTransportException("REQUEST_TIMEOUT", "${request.uri.host} did not respond in time.", exception)
+        } catch (exception: java.net.ConnectException) {
+            throw HttpTransportException("REQUEST_FAILED", "Could not connect to ${request.uri.host}.", exception)
         } catch (exception: Exception) {
-            throw HttpTransportException("REQUEST_FAILED", "HTTP request failed.", exception)
+            throw HttpTransportException("REQUEST_FAILED", "HTTP request to ${request.uri.host} failed.", exception)
         }
 
         if (response.statusCode() in 300..399) {
             response.body().close()
-            throw HttpTransportException("REDIRECT_REJECTED", "HTTP redirects are not followed.")
+            val target = response.headers().firstValue("location").orElse(null)
+                ?.let { location -> runCatching { request.uri.resolve(location) }.getOrNull() }
+            val allowed = target != null && redirectsLeft > 0 &&
+                target.scheme.equals("https", ignoreCase = true) &&
+                target.host?.lowercase() in request.allowedRedirectHosts
+            if (!allowed) throw HttpTransportException("REDIRECT_REJECTED", "HTTP redirects are not followed.")
+            // Only the URI changes; headers, size limit and accepted content types carry over unchanged.
+            return execute(request.copy(uri = target!!), redirectsLeft - 1)
+        }
+        if (response.statusCode() !in 200..299) {
+            response.body().close()
+            throw HttpStatusException(response.statusCode(), "${request.uri.host} returned HTTP ${response.statusCode()}.")
         }
 
         val contentType = response.headers().firstValue("content-type").orElse("")

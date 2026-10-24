@@ -3,7 +3,10 @@ package com.kmpdependencyresolver.plugin.ui
 import com.kmpdependencyresolver.core.model.Candidate
 import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.TargetFamily
+import com.kmpdependencyresolver.core.search.ProviderFailure
 import com.kmpdependencyresolver.core.search.SearchRequest
+import com.kmpdependencyresolver.core.search.defaultVersion
+import com.kmpdependencyresolver.core.search.isExactQueryMatch
 import com.kmpdependencyresolver.providers.AggregatedSearchResult
 
 fun interface DependencySearchGateway { fun search(request: SearchRequest): AggregatedSearchResult }
@@ -24,6 +27,8 @@ data class SearchResultItem(
     val freshnessLabel: String?,
     val section: PublisherSection,
     val publisherName: String?,
+    /** Shown on the row and preselected by Copy and Add, so all three agree. */
+    val defaultVersion: String? = null,
 )
 
 data class SearchUiState(
@@ -65,11 +70,25 @@ class SearchPresenter(
         if (query.isBlank()) return
         pendingDebounce = debounceScheduler.schedule(300) {
             pendingSearch = worker.schedule(0) {
-                val result = gateway.search(SearchRequest(query, requiredTargets, includePreRelease))
+                val result = try {
+                    gateway.search(SearchRequest(query, requiredTargets, includePreRelease))
+                } catch (_: java.util.concurrent.CancellationException) {
+                    return@schedule
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return@schedule
+                } catch (exception: Exception) {
+                    // Without this the worker dies silently and the panel stays on "Searching…" forever.
+                    AggregatedSearchResult(emptyList(), listOf(ProviderFailure("search", exception.message ?: exception.javaClass.simpleName)))
+                }
                 ui.dispatch {
                     if (generation != currentGeneration) return@dispatch
-                    val items = result.candidates.map { candidate -> item(candidate, requiredTargets) }
-                        .sortedWith(compareBy({ it.section.ordinal }, { it.group.ordinal }, { it.candidate.coordinates.notation }))
+                    val items = result.candidates.map { candidate -> item(candidate, requiredTargets, includePreRelease) }
+                        .sortedWith(
+                            compareBy<SearchResultItem>({ it.section.ordinal }, { !isExactQueryMatch(it.candidate.coordinates, query) })
+                                .thenBy { it.group.ordinal }
+                                .thenBy { it.candidate.coordinates.notation },
+                        )
                     publish(
                         SearchUiState(
                             query = query,
@@ -102,7 +121,7 @@ class SearchPresenter(
         onState(next)
     }
 
-    private fun item(candidate: Candidate, required: Set<TargetFamily>): SearchResultItem {
+    private fun item(candidate: Candidate, required: Set<TargetFamily>, includePreRelease: Boolean): SearchResultItem {
         val group = when {
             candidate.evidence == EvidenceKind.INCOMPATIBLE -> ResultGroup.INCOMPATIBLE
             candidate.evidence == EvidenceKind.UNKNOWN || candidate.supportedTargets.isEmpty() -> ResultGroup.UNKNOWN
@@ -118,6 +137,6 @@ class SearchPresenter(
         }
         val publisher = officialPublishers.publisherFor(candidate.coordinates.group)
         val section = if (publisher == null) PublisherSection.COMMUNITY else PublisherSection.OFFICIAL
-        return SearchResultItem(candidate, group, evidence, freshness, section, publisher)
+        return SearchResultItem(candidate, group, evidence, freshness, section, publisher, defaultVersion(candidate, includePreRelease))
     }
 }

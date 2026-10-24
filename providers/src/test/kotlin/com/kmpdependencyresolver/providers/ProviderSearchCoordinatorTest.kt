@@ -59,6 +59,29 @@ class ProviderSearchCoordinatorTest {
         }
     }
 
+    @Test
+    fun `failures name the provider and slow providers share one deadline`() {
+        val slow = object : SearchProvider {
+            override val id = "google-maven"
+            override fun search(request: SearchRequest): ProviderResult { Thread.sleep(10_000); return result(id, emptyList()) }
+        }
+        val alsoSlow = object : SearchProvider {
+            override val id = "maven-central"
+            override fun search(request: SearchRequest): ProviderResult { Thread.sleep(10_000); return result(id, emptyList()) }
+        }
+        val good = SearchProvider { result("klibs", listOf(candidate("io.ktor", "ktor-client-core"))) }
+
+        ProviderSearchCoordinator(listOf(slow, alsoSlow, good), timeoutMillis = 200).use { coordinator ->
+            val started = System.nanoTime()
+            val result = coordinator.search(SearchRequest("io.ktor:ktor-client-core", emptySet()))
+            val elapsedMillis = (System.nanoTime() - started) / 1_000_000
+
+            assertThat(result.candidates).extracting<String> { it.coordinates.notation }.containsExactly("io.ktor:ktor-client-core")
+            assertThat(result.failures).extracting<String> { it.providerId }.containsExactly("google-maven", "maven-central")
+            assertThat(elapsedMillis).isLessThan(1_000)
+        }
+    }
+
     private fun result(id: String, candidates: List<Candidate>, failure: ProviderFailure? = null) =
         ProviderResult(id, candidates, failure, 1, false)
 

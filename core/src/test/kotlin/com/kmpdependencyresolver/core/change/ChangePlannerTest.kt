@@ -6,6 +6,7 @@ import com.kmpdependencyresolver.core.model.DependencyVersion
 import com.kmpdependencyresolver.core.model.EvidenceKind
 import com.kmpdependencyresolver.core.model.PlacementRecommendation
 import com.kmpdependencyresolver.core.model.Provenance
+import com.kmpdependencyresolver.core.model.TargetFamily
 import com.kmpdependencyresolver.core.recipe.BomRule
 import com.kmpdependencyresolver.core.recipe.CompanionPlugin
 import com.kmpdependencyresolver.core.recipe.DependencyRecipe
@@ -41,6 +42,16 @@ class ChangePlannerTest {
         val conflict = equivalent.copy(catalog = equivalent.catalog.copy(versions = mapOf("ktor" to "2.3.0")))
         assertThat(ChangePlanner().plan(selection("io.ktor", "ktor-client-core", "3.1.0"), conflict).conflicts)
             .extracting<String> { it.code }.contains("VERSION_CONFLICT")
+    }
+
+    @Test
+    fun `existing entry with a literal version is reused or reported as a conflict`() {
+        val literal = project(libraries = mapOf("ktor" to CatalogLibrary(Coordinates("io.ktor", "ktor-client-core"), null, "3.1.0")))
+
+        assertThat(ChangePlanner().plan(selection("io.ktor", "ktor-client-core", "3.1.0"), literal).plan!!.gradleOperations)
+            .containsExactly(GradleOperation.AddDependency("commonMain", "implementation", "ktor", false))
+        assertThat(ChangePlanner().plan(selection("io.ktor", "ktor-client-core", "3.2.0"), literal).conflicts)
+            .extracting<String> { it.code }.containsExactly("VERSION_CONFLICT")
     }
 
     @Test
@@ -86,6 +97,73 @@ class ChangePlannerTest {
             GradleOperation.AddPluginAlias("ksp", false),
             GradleOperation.AddDependency("commonMain", "ksp", "room-compiler", false),
         )
+    }
+
+    @Test
+    fun `KMP Room recipe adds the compiler to every target KSP configuration`() {
+        val recipe = recipe(
+            plugins = listOf(CompanionPlugin("ksp", "com.google.devtools.ksp", true)),
+            processors = listOf(ProcessorRequirement(Coordinates("androidx.room", "room-compiler"), "ksp", true)),
+        )
+        val project = project(
+            plugins = mapOf("ksp" to CatalogPlugin("com.google.devtools.ksp", "kspVersion")),
+        ).copy(sourceSetTargetNames = mapOf("commonMain" to listOf("android", "iosArm64", "desktop")))
+
+        val result = ChangePlanner().plan(selection("androidx.room", "room-runtime", "2.7.0", recipe), project)
+
+        assertThat(result.conflicts).isEmpty()
+        assertThat(result.plan!!.gradleOperations).containsExactly(
+            GradleOperation.AddRootPluginAlias("ksp"),
+            GradleOperation.AddPluginAlias("ksp", false),
+            GradleOperation.AddDependency("commonMain", "implementation", "room-runtime", false),
+            GradleOperation.AddTopLevelDependency("kspAndroid", "room-compiler"),
+            GradleOperation.AddTopLevelDependency("kspDesktop", "room-compiler"),
+            GradleOperation.AddTopLevelDependency("kspIosArm64", "room-compiler"),
+        )
+        assertThat(result.plan!!.catalogOperations.filterIsInstance<CatalogOperation.PutLibrary>()).extracting<String> { it.alias }
+            .containsExactlyInAnyOrder("room-runtime", "room-compiler")
+    }
+
+    @Test
+    fun `Kotlin JVM module plans BOM library and plain KSP in its main source set`() {
+        val recipe = recipe(
+            bom = BomRule(Coordinates("io.ktor", "ktor-bom")),
+            processors = listOf(ProcessorRequirement(Coordinates("sample", "processor"), "ksp", true)),
+        )
+        val project = project(configurations = setOf("implementation", "ksp"))
+            .copy(sourceSetTargets = mapOf(JVM_SOURCE_SET to setOf(TargetFamily.JVM)))
+        val selection = selection("io.ktor", "ktor-server-core", "3.6.0", recipe).copy(
+            recommendation = PlacementRecommendation(JVM_SOURCE_SET, EvidenceKind.VERIFIED, "test", false),
+        )
+
+        val result = ChangePlanner().plan(selection, project)
+
+        assertThat(result.conflicts).isEmpty()
+        assertThat(result.plan!!.gradleOperations).containsExactly(
+            GradleOperation.AddDependency("main", "implementation", "ktor-bom", true),
+            GradleOperation.AddDependency("main", "implementation", "ktor-server-core", false),
+            GradleOperation.AddDependency("main", "ksp", "processor", false),
+        )
+    }
+
+    @Test
+    fun `BOM is rejected in a source set that compiles non JVM targets`() {
+        val recipe = recipe(bom = BomRule(Coordinates("androidx.compose", "compose-bom")))
+        val project = project().copy(
+            sourceSetTargets = mapOf(
+                "commonMain" to setOf(TargetFamily.ANDROID, TargetFamily.IOS),
+                "androidMain" to setOf(TargetFamily.ANDROID),
+            ),
+        )
+
+        val common = ChangePlanner().plan(selection("androidx.compose.ui", "ui", "2025.01.00", recipe), project)
+        val android = ChangePlanner().plan(
+            selection("androidx.compose.ui", "ui", "2025.01.00", recipe).copy(overrideSourceSet = "androidMain"),
+            project,
+        )
+
+        assertThat(common.conflicts).extracting<String> { it.code }.containsExactly("BOM_REQUIRES_JVM_SOURCE_SET")
+        assertThat(android.plan!!.gradleOperations).contains(GradleOperation.AddDependency("androidMain", "implementation", "compose-bom", true))
     }
 
     @Test
